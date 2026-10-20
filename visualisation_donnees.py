@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import urllib
 import os
+import pandas as pd
+import polars as pl
 import zipfile
 
 URL_ZIP_IDFM = "https://files.mobilitydatabase.org/tdg-80921/tdg-80921-202610140154/tdg-80921-202610140154.zip"
@@ -29,6 +31,24 @@ def charger_filosofi(path):
         df_filosofi["lcog_geo"].str[:2].isin(liste_departements)
     ]
     return df_filosofi
+
+
+def charger_lignes(path):
+    """Chargement des lignes IDFM"""
+
+    df_routes = pd.read_csv(f"{path}/routes.txt")
+
+    filtre_metro = df_routes["route_type"] == 1
+    filtre_rer = (df_routes["route_type"] == 2) & (df_routes["agency_id"] == "IDFM:71")
+    df_routes = df_routes.loc[filtre_metro | filtre_rer][["route_id"]]
+
+    df_trips = pd.read_csv(f"{path}/trips.txt")
+    df_trips = df_trips.merge(df_routes, on="route_id", how = "inner")
+
+    df_shapes = pd.read_csv(f"{path}/shapes.txt")
+    df_shapes = df_shapes.merge(df_trips, on = "shape_id")
+
+    return df_routes, df_trips, df_shapes
 
 
 def indicateurs_filosofi(df_filosofi):
@@ -67,9 +87,10 @@ def afficher_carte_filosofi(df_filosofi, indicateur):
 
 if __name__ == "__main__":
     os.makedirs("data", exist_ok=True)
-    telecharger_zip(URL_ZIP_IDFM, "idfm")
-    telecharger_zip(URL_ZIP_FILOSOFI, "filosofi")
-    df_filosofi = charger_filosofi("data/filosofi/france_metro/carreaux_200m_met.shp")
-    df_filosofi = indicateurs_filosofi(df_filosofi)
-    df_filosofi = definir_quantiles(df_filosofi, "nv", 6)
-    afficher_carte_filosofi(df_filosofi, "nv")
+    # telecharger_zip(URL_ZIP_IDFM, "idfm")
+    # telecharger_zip(URL_ZIP_FILOSOFI, "filosofi")
+    df_routes = charger_lignes("data/idfm")
+    # df_filosofi = charger_filosofi("data/filosofi/france_metro/carreaux_200m_met.shp")
+    # df_filosofi = indicateurs_filosofi(df_filosofi)
+    # df_filosofi = definir_quantiles(df_filosofi, "nv", 6)
+    # afficher_carte_filosofi(df_filosofi, "nv")
