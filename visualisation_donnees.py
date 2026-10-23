@@ -36,16 +36,16 @@ def charger_filosofi(path):
 def charger_lignes(path):
     """Chargement des lignes IDFM"""
 
-    df_routes = pd.read_csv(f"{path}/routes.txt")
+    df_routes = pd.read_csv(f"{path}/routes.txt", usecols=["route_id","route_type", "route_short_name","route_color","route_text_color","agency_id"])
 
     filtre_metro = df_routes["route_type"] == 1
     filtre_rer = (df_routes["route_type"] == 2) & (df_routes["agency_id"] == "IDFM:71")
-    df_routes = df_routes.loc[filtre_metro | filtre_rer][["route_id"]]
+    df_routes = df_routes.loc[filtre_metro | filtre_rer]
 
-    df_trips = pd.read_csv(f"{path}/trips.txt")
+    df_trips = pd.read_csv(f"{path}/trips.txt", usecols=["route_id","shape_id"]).drop_duplicates("shape_id")
     df_trips = df_trips.merge(df_routes, on="route_id", how = "inner")
 
-    df_shapes = pd.read_csv(f"{path}/shapes.txt")
+    df_shapes = pd.read_csv(f"{path}/shapes.txt", usecols = ['shape_id','shape_pt_lat','shape_pt_lon','shape_pt_sequence']).drop_duplicates()
     df_shapes = df_shapes.merge(df_trips, on = "shape_id")
 
     return df_routes, df_trips, df_shapes
@@ -90,6 +90,7 @@ if __name__ == "__main__":
     # telecharger_zip(URL_ZIP_IDFM, "idfm")
     # telecharger_zip(URL_ZIP_FILOSOFI, "filosofi")
     df_routes = charger_lignes("data/idfm")
+    print(df_routes[-1])
     # df_filosofi = charger_filosofi("data/filosofi/france_metro/carreaux_200m_met.shp")
     # df_filosofi = indicateurs_filosofi(df_filosofi)
     # df_filosofi = definir_quantiles(df_filosofi, "nv", 6)
