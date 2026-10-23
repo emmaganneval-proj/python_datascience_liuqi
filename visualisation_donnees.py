@@ -139,7 +139,7 @@ def ajouter_lignes_graphique(ax, gpd_idfm):
 
 
 def charger_arrets(path, df_trips):
-    "Chargment des arrêts des trains"
+    "Chargement des arrêts des trains"
     df_arrets = pd.read_csv(f"{path}/stop_times.txt", usecols=["trip_id", "stop_id"])
     df_arrets = (
         df_arrets.merge(
