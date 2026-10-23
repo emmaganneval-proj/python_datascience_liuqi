@@ -120,6 +120,16 @@ def construire_lignes_idfm(df_idfm):
     return gpd_idfm
 
 
+def ajouter_lignes_graphique(ax, gpd_idfm):
+    "Superposer les lignes IDFM à la carte"
+    gpd_idfm.plot(
+        color="#" + gpd_idfm["route_color"],
+        linewidth=np.where(gpd_idfm["mode"] == "metro", 1, 2),
+        ax=ax,
+    )
+    return ax
+
+
 if __name__ == "__main__":
     os.makedirs("data", exist_ok=True)
     # telecharger_zip(URL_ZIP_IDFM, "idfm")
@@ -128,12 +138,8 @@ if __name__ == "__main__":
     df_filosofi = indicateurs_filosofi(df_filosofi)
     df_filosofi = definir_quantiles(df_filosofi, "nv", 6)
 
-    ax = generer_carte_filosofi(df_filosofi, "nv")
     df_idfm = charger_lignes("data/idfm")
     gpd_idfm = construire_lignes_idfm(df_idfm)
-    gpd_idfm.plot(
-        color="#" + gpd_idfm["route_color"],
-        linewidth=np.where(gpd_idfm["mode"] == "metro", 1, 2),
-        ax=ax,
-    )
+    ax = generer_carte_filosofi(df_filosofi, "nv")
+    ax = ajouter_lignes_graphique(ax, gpd_idfm)
     plt.show()
