@@ -3,7 +3,6 @@ import urllib
 import zipfile
 
 import geopandas as gpd
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from shapely.geometry import LineString
@@ -34,8 +33,7 @@ def charger_filosofi(path):
     return df_filosofi
 
 
-def charger_lignes(path):
-    """Chargement des lignes et des parcours IDFM"""
+def charger_routes(path):
 
     df_routes = pd.read_csv(
         f"{path}/routes.txt",
@@ -53,17 +51,27 @@ def charger_lignes(path):
     filtre_rer = (df_routes["route_type"] == 2) & (df_routes["agency_id"] == "IDFM:71")
     df_routes = df_routes.loc[filtre_metro | filtre_rer]
     df_routes["mode"] = np.where(df_routes["route_type"] == 1, "metro", "rer")
+    return df_routes
 
+
+def charger_trips(path, df_routes):
     df_trips = pd.read_csv(
-        f"{path}/trips.txt", usecols=["route_id", "shape_id"]
-    ).drop_duplicates("shape_id")
+        f"{path}/trips.txt", usecols=["route_id", "shape_id", "trip_id"]
+    )
     df_trips = df_trips.merge(df_routes, on="route_id", how="inner")
+    return df_trips
+
+
+def charger_lignes(path, df_trips):
+    """Chargement des lignes et des parcours IDFM"""
 
     df_shapes = pd.read_csv(
         f"{path}/shapes.txt",
         usecols=["shape_id", "shape_pt_lat", "shape_pt_lon", "shape_pt_sequence"],
     ).drop_duplicates()
-    df_shapes = df_shapes.merge(df_trips, on="shape_id")
+    df_shapes = df_shapes.merge(
+        df_trips.drop_duplicates("shape_id").drop(columns=["trip_id"]), on="shape_id"
+    )
 
     df_shapes = df_shapes.sort_values(["shape_id", "shape_pt_sequence"])
 
@@ -130,16 +138,36 @@ def ajouter_lignes_graphique(ax, gpd_idfm):
     return ax
 
 
+def charger_arrets(path, df_trips):
+    df_arrets = pd.read_csv(f"{path}/stop_times.txt", usecols=["trip_id", "stop_id"])
+    df_arrets = (
+        df_arrets.merge(
+            df_trips,
+            on="trip_id",
+        )
+        .drop(columns=["trip_id", "shape_id"])
+        .drop_duplicates(["route_id", "stop_id"])
+    )
+    return df_arrets
+
+
 if __name__ == "__main__":
     os.makedirs("data", exist_ok=True)
     # telecharger_zip(URL_ZIP_IDFM, "idfm")
     # telecharger_zip(URL_ZIP_FILOSOFI, "filosofi")
-    df_filosofi = charger_filosofi("data/filosofi/france_metro/carreaux_200m_met.shp")
-    df_filosofi = indicateurs_filosofi(df_filosofi)
-    df_filosofi = definir_quantiles(df_filosofi, "nv", 6)
 
-    df_idfm = charger_lignes("data/idfm")
-    gpd_idfm = construire_lignes_idfm(df_idfm)
-    ax = generer_carte_filosofi(df_filosofi, "nv")
-    ax = ajouter_lignes_graphique(ax, gpd_idfm)
-    plt.show()
+    # df_filosofi = charger_filosofi("data/filosofi/france_metro/carreaux_200m_met.shp")
+    # df_filosofi = indicateurs_filosofi(df_filosofi)
+    # df_filosofi = definir_quantiles(df_filosofi, "nv", 6)
+
+    df_routes = charger_routes("data/idfm")
+    df_trips = charger_trips("data/idfm", df_routes)
+    df_lignes = charger_lignes("data/idfm", df_trips)
+    gpd_idfm = construire_lignes_idfm(df_lignes)
+
+    df_arrets = charger_arrets("data/idfm", df_trips)
+    print(df_arrets)
+
+    # ax = generer_carte_filosofi(df_filosofi, "nv")
+    # ax = ajouter_lignes_graphique(ax, gpd_idfm)
+    # plt.show()
