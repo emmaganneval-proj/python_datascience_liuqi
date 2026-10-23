@@ -126,7 +126,10 @@ if __name__ == "__main__":
     # telecharger_zip(URL_ZIP_FILOSOFI, "filosofi")
     df_idfm = charger_lignes("data/idfm")
     gpd_idfm = construire_lignes_idfm(df_idfm)
-    gpd_idfm.plot()
+    gpd_idfm.plot(
+        color="#" + gpd_idfm["route_color"],
+        linewidth=np.where(gpd_idfm["mode"] == "metro", 1, 2),
+    )
     plt.show()
     # df_filosofi = charger_filosofi("data/filosofi/france_metro/carreaux_200m_met.shp")
     # df_filosofi = indicateurs_filosofi(df_filosofi)
