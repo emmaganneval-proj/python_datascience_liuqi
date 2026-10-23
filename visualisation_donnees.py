@@ -60,7 +60,7 @@ def indicateurs_filosofi(df_filosofi):
 def definir_quantiles(df_filosofi, indicateur, nb_quantiles):
     """Calcul du quantile de la valeur d'un indicateur pour chaque carreau"""
     quantiles = np.quantile(
-        a=df_filosofi["nv"],
+        a=df_filosofi[indicateur],
         q=[(k + 1) / nb_quantiles for k in range(nb_quantiles - 1)],
         method="inverted_cdf",
         weights=df_filosofi["ind"],
