@@ -51,6 +51,7 @@ def charger_lignes(path):
     filtre_metro = df_routes["route_type"] == 1
     filtre_rer = (df_routes["route_type"] == 2) & (df_routes["agency_id"] == "IDFM:71")
     df_routes = df_routes.loc[filtre_metro | filtre_rer]
+    df_routes["mode"] = np.where(df_routes["route_type"] == 1, "metro", "rer")
 
     df_trips = pd.read_csv(
         f"{path}/trips.txt", usecols=["route_id", "shape_id"]
@@ -62,6 +63,8 @@ def charger_lignes(path):
         usecols=["shape_id", "shape_pt_lat", "shape_pt_lon", "shape_pt_sequence"],
     ).drop_duplicates()
     df_shapes = df_shapes.merge(df_trips, on="shape_id")
+
+    df_shapes = df_shapes.sort_values(["shape_id", "shape_pt_sequence"])
 
     return df_routes, df_trips, df_shapes
 
