@@ -90,8 +90,8 @@ def definir_quantiles(df_filosofi, indicateur, nb_quantiles):
     return df_filosofi
 
 
-def afficher_carte_filosofi(df_filosofi, indicateur):
-    "Affiche la carte pour l'indicateur demandé"
+def generer_carte_filosofi(df_filosofi, indicateur):
+    "Génère la carte pour l'indicateur demandé"
     ax = df_filosofi.plot(
         column=f"{indicateur}_quantile",
         categorical=True,
@@ -101,7 +101,7 @@ def afficher_carte_filosofi(df_filosofi, indicateur):
         figsize=(10, 10),
     )
     ax.set_axis_off()
-    plt.show()
+    return ax
 
 
 def construire_lignes_idfm(df_idfm):
@@ -124,14 +124,16 @@ if __name__ == "__main__":
     os.makedirs("data", exist_ok=True)
     # telecharger_zip(URL_ZIP_IDFM, "idfm")
     # telecharger_zip(URL_ZIP_FILOSOFI, "filosofi")
+    df_filosofi = charger_filosofi("data/filosofi/france_metro/carreaux_200m_met.shp")
+    df_filosofi = indicateurs_filosofi(df_filosofi)
+    df_filosofi = definir_quantiles(df_filosofi, "nv", 6)
+
+    ax = generer_carte_filosofi(df_filosofi, "nv")
     df_idfm = charger_lignes("data/idfm")
     gpd_idfm = construire_lignes_idfm(df_idfm)
     gpd_idfm.plot(
         color="#" + gpd_idfm["route_color"],
         linewidth=np.where(gpd_idfm["mode"] == "metro", 1, 2),
+        ax=ax,
     )
     plt.show()
-    # df_filosofi = charger_filosofi("data/filosofi/france_metro/carreaux_200m_met.shp")
-    # df_filosofi = indicateurs_filosofi(df_filosofi)
-    # df_filosofi = definir_quantiles(df_filosofi, "nv", 6)
-    # afficher_carte_filosofi(df_filosofi, "nv")
