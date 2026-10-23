@@ -34,7 +34,7 @@ def charger_filosofi(path):
 
 
 def charger_routes(path):
-
+    """Chargement des lignes IDFM (métro et RER)"""
     df_routes = pd.read_csv(
         f"{path}/routes.txt",
         usecols=[
@@ -55,6 +55,7 @@ def charger_routes(path):
 
 
 def charger_trips(path, df_routes):
+    "Chargement des trains"
     df_trips = pd.read_csv(
         f"{path}/trips.txt", usecols=["route_id", "shape_id", "trip_id"]
     )
@@ -62,8 +63,8 @@ def charger_trips(path, df_routes):
     return df_trips
 
 
-def charger_lignes(path, df_trips):
-    """Chargement des lignes et des parcours IDFM"""
+def charger_parcours(path, df_trips):
+    """Chargement du tracé des parcours géographiques des lignes IDFM"""
 
     df_shapes = pd.read_csv(
         f"{path}/shapes.txt",
@@ -112,19 +113,18 @@ def generer_carte_filosofi(df_filosofi, indicateur):
     return ax
 
 
-def construire_lignes_idfm(df_idfm):
+def construire_lignes_idfm(df_parcours):
     "Construit le tracé des lignes de métro / RER"
-    df_shapes = df_idfm.groupby("shape_id").apply(
+    df_shapes = df_parcours.groupby("shape_id").apply(
         lambda group: LineString(zip(group["shape_pt_lon"], group["shape_pt_lat"]))
     )
     gpd_idfm = gpd.GeoDataFrame(
-        df_idfm.drop_duplicates("shape_id")
+        df_parcours.drop_duplicates("shape_id")
         .drop(columns=["shape_pt_lat", "shape_pt_lon", "shape_pt_sequence"])
         .set_index("shape_id"),
         geometry=df_shapes,
         crs="EPSG:4326",
     ).to_crs("EPSG:2154")
-    print(len(gpd_idfm))
     return gpd_idfm
 
 
@@ -139,6 +139,7 @@ def ajouter_lignes_graphique(ax, gpd_idfm):
 
 
 def charger_arrets(path, df_trips):
+    "Chargment des arrêts des trains"
     df_arrets = pd.read_csv(f"{path}/stop_times.txt", usecols=["trip_id", "stop_id"])
     df_arrets = (
         df_arrets.merge(
@@ -162,8 +163,8 @@ if __name__ == "__main__":
 
     df_routes = charger_routes("data/idfm")
     df_trips = charger_trips("data/idfm", df_routes)
-    df_lignes = charger_lignes("data/idfm", df_trips)
-    gpd_idfm = construire_lignes_idfm(df_lignes)
+    df_parcours = charger_parcours("data/idfm", df_trips)
+    gpd_idfm = construire_lignes_idfm(df_parcours)
 
     df_arrets = charger_arrets("data/idfm", df_trips)
     print(df_arrets)
