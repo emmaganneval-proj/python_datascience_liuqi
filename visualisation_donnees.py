@@ -6,6 +6,7 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from shapely.geometry import LineString
 
 URL_ZIP_IDFM = "https://files.mobilitydatabase.org/tdg-80921/tdg-80921-202610140154/tdg-80921-202610140154.zip"
 URL_ZIP_FILOSOFI = "https://www.insee.fr/fr/statistiques/fichier/8735162/Filosofi2021_carreaux_200m_shp.zip"
@@ -66,7 +67,7 @@ def charger_lignes(path):
 
     df_shapes = df_shapes.sort_values(["shape_id", "shape_pt_sequence"])
 
-    return df_routes, df_trips, df_shapes
+    return df_shapes
 
 
 def indicateurs_filosofi(df_filosofi):
@@ -103,12 +104,30 @@ def afficher_carte_filosofi(df_filosofi, indicateur):
     plt.show()
 
 
+def construire_lignes_idfm(df_idfm):
+    "Construit le tracé des lignes de métro / RER"
+    df_shapes = df_idfm.groupby("shape_id").apply(
+        lambda group: LineString(zip(group["shape_pt_lon"], group["shape_pt_lat"]))
+    )
+    gpd_idfm = gpd.GeoDataFrame(
+        df_idfm.drop_duplicates("shape_id")
+        .drop(columns=["shape_pt_lat", "shape_pt_lon", "shape_pt_sequence"])
+        .set_index("shape_id"),
+        geometry=df_shapes,
+        crs="EPSG:4326",
+    ).to_crs("EPSG:2154")
+    print(len(gpd_idfm))
+    return gpd_idfm
+
+
 if __name__ == "__main__":
     os.makedirs("data", exist_ok=True)
     # telecharger_zip(URL_ZIP_IDFM, "idfm")
     # telecharger_zip(URL_ZIP_FILOSOFI, "filosofi")
-    df_routes = charger_lignes("data/idfm")
-    print(df_routes[-1])
+    df_idfm = charger_lignes("data/idfm")
+    gpd_idfm = construire_lignes_idfm(df_idfm)
+    gpd_idfm.plot()
+    plt.show()
     # df_filosofi = charger_filosofi("data/filosofi/france_metro/carreaux_200m_met.shp")
     # df_filosofi = indicateurs_filosofi(df_filosofi)
     # df_filosofi = definir_quantiles(df_filosofi, "nv", 6)
