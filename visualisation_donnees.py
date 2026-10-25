@@ -175,6 +175,16 @@ def charger_stations(path, df_arrets):
     return df_stations
 
 
+def ajouter_stations_graphique(df_stations, ax):
+    gpd_stations = gpd.GeoDataFrame(
+        df_stations,
+        geometry=gpd.points_from_xy(df_stations["stop_lon"], df_stations["stop_lat"]),
+        crs="EPSG:4326",
+    ).to_crs("EPSG:2154")
+    print(gpd_stations)
+    return ax
+
+
 if __name__ == "__main__":
     os.makedirs("data", exist_ok=True)
     # telecharger_zip(URL_ZIP_IDFM, "idfm")
@@ -191,6 +201,7 @@ if __name__ == "__main__":
 
     df_arrets = charger_arrets("data/idfm", df_trips)
     df_stations = charger_stations("data/idfm", df_arrets)
+    ax = ajouter_stations_graphique(df_stations, 2)
     # ax = generer_carte_filosofi(df_filosofi, "nv")
     # ax = ajouter_lignes_graphique(ax, gpd_idfm)
     # plt.show()
