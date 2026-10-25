@@ -3,6 +3,7 @@ import urllib
 import zipfile
 
 import geopandas as gpd
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from shapely.geometry import LineString
@@ -176,12 +177,17 @@ def charger_stations(path, df_arrets):
 
 
 def ajouter_stations_graphique(df_stations, ax):
+    """Ajoute les stations sur le graphique"""
     gpd_stations = gpd.GeoDataFrame(
         df_stations,
         geometry=gpd.points_from_xy(df_stations["stop_lon"], df_stations["stop_lat"]),
         crs="EPSG:4326",
     ).to_crs("EPSG:2154")
-    print(gpd_stations)
+    gpd_stations.plot(
+        color="#" + gpd_stations["route_color"],
+        markersize=np.where(gpd_stations["mode"] == "metro", 5, 10),
+        ax=ax,
+    )
     return ax
 
 
@@ -190,9 +196,9 @@ if __name__ == "__main__":
     # telecharger_zip(URL_ZIP_IDFM, "idfm")
     # telecharger_zip(URL_ZIP_FILOSOFI, "filosofi")
 
-    # df_filosofi = charger_filosofi("data/filosofi/france_metro/carreaux_200m_met.shp")
-    # df_filosofi = indicateurs_filosofi(df_filosofi)
-    # df_filosofi = definir_quantiles(df_filosofi, "nv", 6)
+    df_filosofi = charger_filosofi("data/filosofi/france_metro/carreaux_200m_met.shp")
+    df_filosofi = indicateurs_filosofi(df_filosofi)
+    df_filosofi = definir_quantiles(df_filosofi, "nv", 6)
 
     df_routes = charger_routes("data/idfm")
     df_trips = charger_trips("data/idfm", df_routes)
@@ -201,7 +207,7 @@ if __name__ == "__main__":
 
     df_arrets = charger_arrets("data/idfm", df_trips)
     df_stations = charger_stations("data/idfm", df_arrets)
-    ax = ajouter_stations_graphique(df_stations, 2)
-    # ax = generer_carte_filosofi(df_filosofi, "nv")
-    # ax = ajouter_lignes_graphique(ax, gpd_idfm)
-    # plt.show()
+    ax = generer_carte_filosofi(df_filosofi, "nv")
+    ax = ajouter_lignes_graphique(ax, gpd_idfm)
+    ax = ajouter_stations_graphique(df_stations, ax)
+    plt.show()
