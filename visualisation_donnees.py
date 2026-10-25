@@ -152,6 +152,29 @@ def charger_arrets(path, df_trips):
     return df_arrets
 
 
+def charger_stations(path, df_arrets):
+    "Chargement de la position des stations"
+    df_stations = pd.read_csv(
+        f"{path}/stops.txt",
+        usecols=["stop_id", "stop_name", "stop_lon", "stop_lat", "parent_station"],
+    )
+
+    df_parents = df_stations[["stop_id", "parent_station"]].merge(
+        df_arrets, on="stop_id"
+    )
+
+    df_stations = (
+        df_stations.drop(columns=["parent_station"])
+        .merge(
+            df_parents.drop(columns=["stop_id"]),
+            left_on="stop_id",
+            right_on="parent_station",
+        )
+        .drop_duplicates(["route_id", "stop_id"])
+    )
+    return df_stations
+
+
 if __name__ == "__main__":
     os.makedirs("data", exist_ok=True)
     # telecharger_zip(URL_ZIP_IDFM, "idfm")
@@ -167,8 +190,7 @@ if __name__ == "__main__":
     gpd_idfm = construire_lignes_idfm(df_parcours)
 
     df_arrets = charger_arrets("data/idfm", df_trips)
-    print(df_arrets)
-
+    df_stations = charger_stations("data/idfm", df_arrets)
     # ax = generer_carte_filosofi(df_filosofi, "nv")
     # ax = ajouter_lignes_graphique(ax, gpd_idfm)
     # plt.show()
