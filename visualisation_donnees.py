@@ -10,6 +10,8 @@ from shapely.geometry import LineString
 
 URL_ZIP_IDFM = "https://files.mobilitydatabase.org/tdg-80921/tdg-80921-202610140154/tdg-80921-202610140154.zip"
 URL_ZIP_FILOSOFI = "https://www.insee.fr/fr/statistiques/fichier/8735162/Filosofi2021_carreaux_200m_shp.zip"
+XLIM = (630_000, 680_000)
+YLIM = (6_830_000, 6_880_000)
 
 
 def telecharger_zip(url, nom_dossier):
@@ -183,6 +185,7 @@ def ajouter_stations_graphique(df_stations, ax):
         geometry=gpd.points_from_xy(df_stations["stop_lon"], df_stations["stop_lat"]),
         crs="EPSG:4326",
     ).to_crs("EPSG:2154")
+    # TODO : point blanc si une station dessert plusieurs lignes (ex. Châtelet)
     gpd_stations.plot(
         color="#" + gpd_stations["route_color"],
         markersize=np.where(gpd_stations["mode"] == "metro", 5, 10),
@@ -210,4 +213,6 @@ if __name__ == "__main__":
     ax = generer_carte_filosofi(df_filosofi, "nv")
     ax = ajouter_lignes_graphique(ax, gpd_idfm)
     ax = ajouter_stations_graphique(df_stations, ax)
+    ax.set_xlim(XLIM)
+    ax.set_ylim(YLIM)
     plt.show()
