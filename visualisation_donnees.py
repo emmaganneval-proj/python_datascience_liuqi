@@ -96,9 +96,24 @@ def definir_quantiles(df_filosofi, indicateur, nb_quantiles):
         method="inverted_cdf",
         weights=df_filosofi["ind"],
     )
-    df_filosofi[f"{indicateur}_quantile"] = np.digitize(
-        df_filosofi[indicateur], quantiles
+    noms_quantiles = (
+        [f"< {quantiles[0]}"]
+        + [f"{quantiles[i]} - {quantiles[i + 1]}" for i in range(len(quantiles) - 1)]
+        + [f"≥ {quantiles[-1]}"]
     )
+    print(noms_quantiles)
+    df_filosofi[f"{indicateur}_quantile"] = pd.cut(
+        x=df_filosofi[f"{indicateur}"],
+        bins=np.concatenate(([-np.inf], quantiles, [np.inf])),
+        labels=noms_quantiles,
+        right=False,
+    )
+
+    # np.digitize(
+    #     df_filosofi[indicateur], quantiles
+    # )
+    # df_filosofi[f"{indicateur}_nom_quantile"] = df_filosofi[f"{indicateur}_quantile"]
+    # .replace({i: noms_quantiles[i] for i in range(len(quantiles))})
     return df_filosofi
 
 
@@ -110,6 +125,7 @@ def generer_carte_filosofi(df_filosofi, indicateur):
         cmap="RdYlGn",
         linewidth=0,
         legend=True,
+        # legend_kwds=f"{indicateur}_nom_quantile",
         figsize=(10, 10),
     )
     ax.set_axis_off()
@@ -137,6 +153,13 @@ def ajouter_lignes_graphique(ax, gpd_idfm):
         color="#" + gpd_idfm["route_color"],
         linewidth=np.where(gpd_idfm["mode"] == "metro", 1, 2),
         ax=ax,
+        zorder=4,
+    )
+    gpd_idfm.plot(
+        color="white",
+        linewidth=np.where(gpd_idfm["mode"] == "metro", 2, 3),
+        ax=ax,
+        zorder=3,
     )
     return ax
 
@@ -185,11 +208,13 @@ def ajouter_stations_graphique(df_stations, ax):
         geometry=gpd.points_from_xy(df_stations["stop_lon"], df_stations["stop_lat"]),
         crs="EPSG:4326",
     ).to_crs("EPSG:2154")
-    # TODO : point blanc si une station dessert plusieurs lignes (ex. Châtelet)
     gpd_stations.plot(
-        color="#" + gpd_stations["route_color"],
+        color="white",
+        edgecolor="black",
+        linewidth=0.5,
         markersize=np.where(gpd_stations["mode"] == "metro", 5, 10),
         ax=ax,
+        zorder=5,
     )
     return ax
 
