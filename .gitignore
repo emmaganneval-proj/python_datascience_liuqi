@@ -1,0 +1,3 @@
+# Environnement uv
+.venv/
+__pycache__/
