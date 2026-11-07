@@ -1,3 +1,6 @@
 # Environnement uv
 .venv/
 __pycache__/
+
+# Données
+/data
