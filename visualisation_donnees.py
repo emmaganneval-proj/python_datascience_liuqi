@@ -16,6 +16,7 @@ YLIM = (6_830_000, 6_880_000)
 
 def telecharger_zip(url, nom_dossier):
     """Télécharge un zip et le décompresse dans le dossier /data/{nom_dossier}"""
+    os.makedirs("data", exist_ok=True)
     with (
         urllib.request.urlopen(url) as response,
         open("data/tmp.zip", "wb") as fichier_sortie,
@@ -220,7 +221,6 @@ def ajouter_stations_graphique(df_stations, ax):
 
 
 if __name__ == "__main__":
-    os.makedirs("data", exist_ok=True)
     # telecharger_zip(URL_ZIP_IDFM, "idfm")
     # telecharger_zip(URL_ZIP_FILOSOFI, "filosofi")
 
