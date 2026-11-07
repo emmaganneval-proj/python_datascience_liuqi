@@ -1,0 +1,28 @@
+[project]
+name = "python-datascience-liuqi"
+version = "0.1.0"
+description = "Temps de trajet en transports en commun et facteurs socio-économiques en Île-de-France"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "geopandas>=1.1.4",
+    "matplotlib>=3.11.2",
+    "pandas>=3.0.6",
+    "polars>=2.0.0",
+    "pyarrow>=26.0.0",
+    "pyogrio>=0.13.0",
+    "pyproj==3.6.1",
+    "requests>=2.34.2",
+    "shapely>=2.2.0",
+]
+
+[tool.uv]
+# pyproj est figé en 3.6.1 car les versions récentes ne fonctionnent pas sous macOS 13 ;
+# on interdit aussi sa compilation depuis les sources, qui échoue sans PROJ installé.
+no-build-package = ["pyproj"]
+
+[dependency-groups]
+dev = [
+    "black>=26.10.1",
+    "ipykernel>=7.4.0",
+]
