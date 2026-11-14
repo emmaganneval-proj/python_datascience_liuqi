@@ -1,2 +1,14 @@
+<<<<<<< HEAD
 data/
 .DS_Store
+=======
+# Environnement uv
+.venv/
+__pycache__/
+
+# Données
+/data
+
+# macOS
+.DS_Store
+>>>>>>> refs/remotes/origin/main
