@@ -290,6 +290,25 @@ def calculer_temps_trajet(graphe, destination):
     return df_temps
 
 
+def construire_stations(df_stations, df_temps):
+    "Construit la position des stations (une par station) avec leur temps de trajet"
+    df_stations = df_stations.drop_duplicates("stop_id")[
+        ["stop_id", "stop_name", "stop_lon", "stop_lat"]
+    ].merge(df_temps, on="stop_id")
+    gpd_stations = gpd.GeoDataFrame(
+        df_stations,
+        geometry=gpd.points_from_xy(df_stations["stop_lon"], df_stations["stop_lat"]),
+        crs="EPSG:4326",
+    ).to_crs("EPSG:2154")
+    return gpd_stations
+
+
+def construire_centres_carreaux(df_filosofi):
+    "Remplace la géométrie des carreaux par leur centre"
+    gpd_centres = df_filosofi.set_geometry(df_filosofi.centroid)
+    return gpd_centres
+
+
 if __name__ == "__main__":
     # telecharger_zip(URL_ZIP_IDFM, "idfm")
     # telecharger_zip(URL_ZIP_FILOSOFI, "filosofi")
@@ -313,6 +332,9 @@ if __name__ == "__main__":
         df_stations["stop_name"] == "Châtelet - Les Halles", "stop_id"
     ].iloc[0]
     df_temps = calculer_temps_trajet(graphe_reseau, station_destination)
+
+    gpd_stations = construire_stations(df_stations, df_temps)
+    gpd_centres = construire_centres_carreaux(df_filosofi)
 
     ax = generer_carte_filosofi(df_filosofi, "nv")
     ax = ajouter_lignes_graphique(ax, gpd_idfm)
