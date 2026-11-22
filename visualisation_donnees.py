@@ -220,6 +220,49 @@ def ajouter_stations_graphique(df_stations, ax):
     return ax
 
 
+def charger_horaires(path, df_trips):
+    "Chargement des horaires de passage des trains à chaque station"
+    df_horaires = pd.read_csv(
+        f"{path}/stop_times.txt",
+        usecols=[
+            "trip_id",
+            "stop_id",
+            "stop_sequence",
+            "arrival_time",
+            "departure_time",
+        ],
+    )
+    df_parents = pd.read_csv(f"{path}/stops.txt", usecols=["stop_id", "parent_station"])
+    df_horaires = (
+        df_horaires.merge(df_trips[["trip_id", "route_id"]], on="trip_id")
+        .merge(df_parents, on="stop_id")
+        .drop(columns=["stop_id"])
+    )
+    return df_horaires
+
+
+def construire_aretes(df_horaires):
+    "Construit les arêtes du réseau : temps de parcours médian entre deux stations"
+    df_aretes = df_horaires.sort_values(["trip_id", "stop_sequence"])
+    # Les heures peuvent dépasser 24:00 dans le GTFS : to_timedelta les accepte
+    df_aretes["depart"] = pd.to_timedelta(df_aretes["departure_time"])
+    df_aretes["arrivee"] = pd.to_timedelta(df_aretes["arrival_time"])
+
+    df_suivant = df_aretes.groupby("trip_id")[["parent_station", "arrivee"]].shift(-1)
+    df_aretes["station_arrivee"] = df_suivant["parent_station"]
+    df_aretes["temps"] = (
+        df_suivant["arrivee"] - df_aretes["depart"]
+    ).dt.total_seconds() / 60
+
+    df_aretes = (
+        df_aretes.dropna(subset=["station_arrivee"])
+        .rename(columns={"parent_station": "station_depart"})
+        .groupby(["route_id", "station_depart", "station_arrivee"], as_index=False)
+        .agg(temps=("temps", "median"))
+    )
+    return df_aretes
+
+
 if __name__ == "__main__":
     # telecharger_zip(URL_ZIP_IDFM, "idfm")
     # telecharger_zip(URL_ZIP_FILOSOFI, "filosofi")
