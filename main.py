@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-from analyse_donnees import calculer_temps_trajet
+from analyse_donnees import calculer_temps_trajet, joindre_carreaux_stations
 from pretraitement_donnees import (
     URL_ZIP_FILOSOFI,
     URL_ZIP_IDFM,
@@ -54,6 +54,9 @@ if __name__ == "__main__":
 
     gpd_stations = construire_stations(df_stations)
     gpd_centres = construire_centres_carreaux(df_filosofi)
+    gpd_carreaux = joindre_carreaux_stations(
+        gpd_centres, gpd_stations, df_temps, distance_max=1500, vitesse_marche=75
+    )
 
     ax = generer_carte_filosofi(df_filosofi, "nv")
     ax = ajouter_lignes_graphique(ax, gpd_idfm)
