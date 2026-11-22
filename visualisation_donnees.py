@@ -4,6 +4,7 @@ import zipfile
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
 import pandas as pd
 from shapely.geometry import LineString
@@ -263,6 +264,32 @@ def construire_aretes(df_horaires):
     return df_aretes
 
 
+def construire_graphe_reseau(df_aretes):
+    "Construit le graphe orienté du réseau, pondéré par les temps de parcours"
+    # Un même tronçon peut être desservi par plusieurs lignes : on garde la plus rapide
+    df_aretes = df_aretes.groupby(
+        ["station_depart", "station_arrivee"], as_index=False
+    ).agg(temps=("temps", "min"))
+    graphe_reseau = nx.from_pandas_edgelist(
+        df_aretes,
+        source="station_depart",
+        target="station_arrivee",
+        edge_attr="temps",
+        create_using=nx.DiGraph,
+    )
+    return graphe_reseau
+
+
+def calculer_temps_trajet(graphe, destination):
+    "Temps de trajet minimal (en minutes) de chaque station vers la destination"
+    # Graphe inversé : les temps depuis la destination sont ceux vers elle
+    temps = nx.single_source_dijkstra_path_length(
+        graphe.reverse(), destination, weight="temps"
+    )
+    df_temps = pd.DataFrame(list(temps.items()), columns=["stop_id", "temps_trajet"])
+    return df_temps
+
+
 if __name__ == "__main__":
     # telecharger_zip(URL_ZIP_IDFM, "idfm")
     # telecharger_zip(URL_ZIP_FILOSOFI, "filosofi")
@@ -278,6 +305,15 @@ if __name__ == "__main__":
 
     df_arrets = charger_arrets("data/idfm", df_trips)
     df_stations = charger_stations("data/idfm", df_arrets)
+
+    df_horaires = charger_horaires("data/idfm", df_trips)
+    df_aretes = construire_aretes(df_horaires)
+    graphe_reseau = construire_graphe_reseau(df_aretes)
+    station_destination = df_stations.loc[
+        df_stations["stop_name"] == "Châtelet - Les Halles", "stop_id"
+    ].iloc[0]
+    df_temps = calculer_temps_trajet(graphe_reseau, station_destination)
+
     ax = generer_carte_filosofi(df_filosofi, "nv")
     ax = ajouter_lignes_graphique(ax, gpd_idfm)
     ax = ajouter_stations_graphique(df_stations, ax)
