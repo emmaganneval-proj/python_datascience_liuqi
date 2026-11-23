@@ -1,5 +1,6 @@
 import geopandas as gpd
 import networkx as nx
+import numpy as np
 import pandas as pd
 
 
@@ -40,3 +41,29 @@ def joindre_carreaux_stations(
         gpd_carreaux["temps_marche"] + gpd_carreaux["temps_trajet"]
     )
     return gpd_carreaux
+
+
+def calculer_nv_par_tranche_temps(gpd_carreaux, bornes):
+    "Niveau de vie moyen et part de la population par tranche de temps total"
+    noms_tranches = [
+        f"{bornes[i]}-{bornes[i + 1]} min" for i in range(len(bornes) - 1)
+    ] + [f"≥ {bornes[-1]} min"]
+    gpd_carreaux["tranche_temps"] = (
+        pd.cut(
+            gpd_carreaux["temps_total"],
+            bins=bornes + [np.inf],
+            labels=noms_tranches,
+            right=False,
+        )
+        .cat.add_categories("Non desservi")
+        .fillna("Non desservi")
+    )
+    df_tranches = gpd_carreaux.groupby("tranche_temps", observed=True).agg(
+        population=("ind", "sum"), revenus=("ind_snv", "sum")
+    )
+    # Moyenne pondérée par la population, et non moyenne des nv des carreaux
+    df_tranches["nv"] = df_tranches["revenus"] / df_tranches["population"]
+    df_tranches["part_population"] = (
+        df_tranches["population"] / df_tranches["population"].sum()
+    )
+    return df_tranches
