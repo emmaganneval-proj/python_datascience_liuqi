@@ -3,6 +3,7 @@ import os
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import LinearSegmentedColormap
 
 XLIM = (628_000, 680_000)
 YLIM = (6_838_000, 6_885_000)
@@ -139,17 +140,30 @@ def generer_graphique_connexion(df_comparaison):
     return ax
 
 
-def generer_profil_ligne(df_profils, gpd_positions, nom_ligne):
+def generer_profil_ligne(df_profils, gpd_positions, nom_ligne, nv_idf):
     "Niveau de vie par tronçon le long de la ligne, avec le nom des stations"
     df_ligne = df_profils.loc[df_profils["route_short_name"] == nom_ligne]
     gpd_arrets = gpd_positions.loc[gpd_positions["route_short_name"] == nom_ligne]
+    couleur = "#" + gpd_arrets["route_color"].iloc[0]
     ax = df_ligne.plot(
         x="position_km",
         y="nv",
-        color="#" + gpd_arrets["route_color"].iloc[0],
-        legend=False,
+        color=couleur,
+        label="Le long du tracé",
         figsize=(12, 5),
     )
+    # Dégradé : image verticale découpée selon la surface sous la courbe
+    surface = ax.fill_between(df_ligne["position_km"], df_ligne["nv"], color="none")
+    degrade = ax.imshow(
+        np.linspace(1, 0, 100).reshape(-1, 1),
+        cmap=LinearSegmentedColormap.from_list("degrade", ["white", couleur]),
+        aspect="auto",
+        extent=(0, df_ligne["position_km"].max(), 0, df_ligne["nv"].max()),
+    )
+    degrade.set_clip_path(surface.get_paths()[0], transform=ax.transData)
+    ax.axhline(nv_idf, color="grey", linestyle="--", label="Moyenne Île-de-France")
+    ax.set_ylim(0, df_ligne["nv"].max() * 1.05)
+    ax.legend()
     ax.set_xticks(gpd_arrets["position_km"], gpd_arrets["stop_name"], rotation=90)
     ax.grid(axis="x", alpha=0.3)
     ax.set_xlabel("")
