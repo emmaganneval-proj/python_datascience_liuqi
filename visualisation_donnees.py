@@ -72,7 +72,8 @@ def ajouter_pastilles_graphique(ax, gpd_terminus):
     gpd_terminus["x"] = centres.x.values + 1400 * (rangs - (tailles - 1) / 2)
     gpd_terminus["y"] = centres.y.values
     for ligne in gpd_terminus.itertuples():
-        fond = {"boxstyle": "circle", "facecolor": "#" + ligne.route_color}
+        forme = "round,pad=0.3" if ligne.mode == "rer" else "circle"
+        fond = {"boxstyle": forme, "facecolor": "#" + ligne.route_color}
         texte = {"color": "#" + ligne.route_text_color, "ha": "center", "va": "center"}
         ax.text(ligne.x, ligne.y, ligne.route_short_name, bbox=fond, zorder=6, **texte)
     return ax
