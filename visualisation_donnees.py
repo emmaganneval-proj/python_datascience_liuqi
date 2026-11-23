@@ -1,8 +1,11 @@
+import os
+
 import geopandas as gpd
+import matplotlib.pyplot as plt
 import numpy as np
 
-XLIM = (630_000, 680_000)
-YLIM = (6_830_000, 6_880_000)
+XLIM = (628_000, 680_000)
+YLIM = (6_838_000, 6_885_000)
 
 
 def generer_carte_filosofi(df_filosofi, indicateur):
@@ -13,10 +16,10 @@ def generer_carte_filosofi(df_filosofi, indicateur):
         cmap="RdYlGn",
         linewidth=0,
         legend=True,
-        # legend_kwds=f"{indicateur}_nom_quantile",
-        figsize=(10, 10),
+        legend_kwds={"loc": "lower left", "bbox_to_anchor": (1, 0), "frameon": False},
+        figsize=(12, 10),
     )
-    ax.set_axis_off()
+    ax.set(facecolor="gainsboro", xticks=[], yticks=[])
     return ax
 
 
@@ -53,3 +56,62 @@ def ajouter_stations_graphique(df_stations, ax):
         zorder=5,
     )
     return ax
+
+
+def ajouter_pastilles_graphique(ax, gpd_terminus):
+    "Ajoute le nom des lignes à leurs terminus"
+    # Pastilles à moins de 1,6 km l'une de l'autre : alignées autour de leur centre
+    groupes = gpd.GeoSeries(gpd_terminus.buffer(800).union_all()).explode()
+    gpd_groupes = gpd.GeoDataFrame(
+        geometry=groupes.reset_index(drop=True), crs=gpd_terminus.crs
+    )
+    gpd_terminus = gpd.sjoin(gpd_terminus, gpd_groupes, predicate="within")
+    centres = gpd_groupes.centroid.loc[gpd_terminus["index_right"]]
+    rangs = gpd_terminus.groupby("index_right").cumcount()
+    tailles = gpd_terminus.groupby("index_right")["stop_id"].transform("size")
+    gpd_terminus["x"] = centres.x.values + 1400 * (rangs - (tailles - 1) / 2)
+    gpd_terminus["y"] = centres.y.values
+    for ligne in gpd_terminus.itertuples():
+        forme = "round,pad=0.3" if ligne.mode == "rer" else "circle"
+        fond = {"boxstyle": forme, "facecolor": "#" + ligne.route_color}
+        texte = {"color": "#" + ligne.route_text_color, "ha": "center", "va": "center"}
+        ax.text(ligne.x, ligne.y, ligne.route_short_name, bbox=fond, zorder=6, **texte)
+    return ax
+
+
+def generer_graphique_tranches(df_tranches):
+    "Niveau de vie moyen selon le temps de trajet vers Châtelet ou La Défense"
+    _, ax = plt.subplots(figsize=(10, 5))
+    df_tranches["nv"].plot.bar(
+        color=np.where(df_tranches.index == "Non desservi", "grey", "steelblue"),
+        width=0.7,
+        rot=0,
+        ax=ax,
+    )
+    ax.set_xlabel("Temps de trajet vers Châtelet ou La Défense (marche + métro/RER)")
+    ax.set_ylabel("Niveau de vie moyen (€ par an)")
+    return ax
+
+
+def generer_carte_temps(df_filosofi, gpd_carreaux):
+    "Carte du temps de trajet total depuis chaque carreau"
+    # gpd_carreaux a gardé l'index de df_filosofi : on y récupère les polygones
+    gpd_temps = df_filosofi[["geometry"]].join(gpd_carreaux[["temps_total"]])
+    ax = gpd_temps.plot(
+        column="temps_total",
+        cmap="Blues",
+        vmax=60,
+        linewidth=0,
+        legend=True,
+        legend_kwds={"label": "Temps de trajet total (min)", "shrink": 0.6},
+        missing_kwds={"color": "lightgrey"},
+        figsize=(10, 10),
+    )
+    ax.set_axis_off()
+    return ax
+
+
+def enregistrer_graphique(ax, nom_fichier):
+    "Enregistre la figure dans le dossier sorties/"
+    os.makedirs("sorties", exist_ok=True)
+    ax.figure.savefig(f"sorties/{nom_fichier}.png", dpi=150, bbox_inches="tight")
