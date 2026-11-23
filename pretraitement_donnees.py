@@ -153,24 +153,23 @@ def definir_quantiles(df_filosofi, indicateur, nb_quantiles):
         method="inverted_cdf",
         weights=df_filosofi["ind"],
     )
+    noms_bornes = [
+        f"{quantile / 1000:.1f} k€".replace(".", ",") for quantile in quantiles
+    ]
     noms_quantiles = (
-        [f"< {quantiles[0]}"]
-        + [f"{quantiles[i]} - {quantiles[i + 1]}" for i in range(len(quantiles) - 1)]
-        + [f"≥ {quantiles[-1]}"]
+        [f"moins de {noms_bornes[0]}"]
+        + [
+            f"{noms_bornes[i]} – {noms_bornes[i + 1]}"
+            for i in range(len(quantiles) - 1)
+        ]
+        + [f"{noms_bornes[-1]} et plus"]
     )
-    print(noms_quantiles)
     df_filosofi[f"{indicateur}_quantile"] = pd.cut(
         x=df_filosofi[f"{indicateur}"],
         bins=np.concatenate(([-np.inf], quantiles, [np.inf])),
         labels=noms_quantiles,
         right=False,
     )
-
-    # np.digitize(
-    #     df_filosofi[indicateur], quantiles
-    # )
-    # df_filosofi[f"{indicateur}_nom_quantile"] = df_filosofi[f"{indicateur}_quantile"]
-    # .replace({i: noms_quantiles[i] for i in range(len(quantiles))})
     return df_filosofi
 
 
@@ -244,3 +243,21 @@ def construire_centres_carreaux(df_filosofi):
     "Remplace la géométrie des carreaux par leur centre"
     gpd_centres = df_filosofi.set_geometry(df_filosofi.centroid)
     return gpd_centres
+
+
+def construire_terminus(df_horaires, gpd_stations, df_routes):
+    "Construit la position des terminus : stations jamais intermédiaires sur la ligne"
+    sequences = df_horaires.groupby("trip_id")["stop_sequence"]
+    df_terminus = (
+        df_horaires.assign(
+            extremite=(df_horaires["stop_sequence"] == sequences.transform("min"))
+            | (df_horaires["stop_sequence"] == sequences.transform("max"))
+        )
+        .groupby(["route_id", "parent_station"], as_index=False)
+        .agg(terminus=("extremite", "all"))
+        .query("terminus")
+    )
+    gpd_terminus = gpd_stations.merge(
+        df_terminus, left_on="stop_id", right_on="parent_station"
+    ).merge(df_routes, on="route_id")
+    return gpd_terminus
