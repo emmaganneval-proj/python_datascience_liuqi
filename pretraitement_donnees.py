@@ -193,12 +193,12 @@ def construire_aretes(df_horaires):
     df_aretes = df_horaires.sort_values(["trip_id", "stop_sequence"])
     # Les heures peuvent dépasser 24:00 dans le GTFS : to_timedelta les accepte
     df_aretes["depart"] = pd.to_timedelta(df_aretes["departure_time"])
-    df_aretes["arrivee"] = pd.to_timedelta(df_aretes["arrival_time"])
 
-    df_suivant = df_aretes.groupby("trip_id")[["parent_station", "arrivee"]].shift(-1)
+    # Écart entre deux départs successifs : inclut le temps d'arrêt en station
+    df_suivant = df_aretes.groupby("trip_id")[["parent_station", "depart"]].shift(-1)
     df_aretes["station_arrivee"] = df_suivant["parent_station"]
     df_aretes["temps"] = (
-        df_suivant["arrivee"] - df_aretes["depart"]
+        df_suivant["depart"] - df_aretes["depart"]
     ).dt.total_seconds() / 60
 
     df_aretes = (
@@ -261,3 +261,31 @@ def construire_terminus(df_horaires, gpd_stations, df_routes):
         df_terminus, left_on="stop_id", right_on="parent_station"
     ).merge(df_routes, on="route_id")
     return gpd_terminus
+
+
+def construire_traces_lignes(gpd_idfm):
+    "Construit le plus long tracé de chaque ligne"
+    gpd_traces = (
+        gpd_idfm.assign(longueur=gpd_idfm.length)
+        .sort_values("longueur", ascending=False)
+        .drop_duplicates("route_id")
+        .reset_index(drop=True)
+    )
+    return gpd_traces
+
+
+def construire_positions_stations(df_stations, gpd_traces):
+    "Construit la position (en km) des stations le long du tracé de leur ligne"
+    gpd_positions = gpd.GeoDataFrame(
+        df_stations,
+        geometry=gpd.points_from_xy(df_stations["stop_lon"], df_stations["stop_lat"]),
+        crs="EPSG:4326",
+    ).to_crs("EPSG:2154")
+    traces = gpd.GeoSeries(
+        gpd_positions["route_id"].map(gpd_traces.set_index("route_id").geometry),
+        crs="EPSG:2154",
+    )
+    gpd_positions["position_km"] = traces.project(gpd_positions.geometry) / 1000
+    # Une station à plus de 600 m du tracé appartient à une autre branche
+    gpd_positions = gpd_positions.loc[gpd_positions.distance(traces) < 600]
+    return gpd_positions
