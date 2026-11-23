@@ -1,4 +1,5 @@
 import geopandas as gpd
+import matplotlib.pyplot as plt
 import numpy as np
 
 XLIM = (630_000, 680_000)
@@ -52,4 +53,36 @@ def ajouter_stations_graphique(df_stations, ax):
         ax=ax,
         zorder=5,
     )
+    return ax
+
+
+def generer_graphique_tranches(df_tranches):
+    "Niveau de vie moyen selon le temps de trajet vers Châtelet ou La Défense"
+    _, ax = plt.subplots(figsize=(10, 5))
+    df_tranches["nv"].plot.bar(
+        color=np.where(df_tranches.index == "Non desservi", "grey", "steelblue"),
+        width=0.7,
+        rot=0,
+        ax=ax,
+    )
+    ax.set_xlabel("Temps de trajet vers Châtelet ou La Défense (marche + métro/RER)")
+    ax.set_ylabel("Niveau de vie moyen (€ par an)")
+    return ax
+
+
+def generer_carte_temps(df_filosofi, gpd_carreaux):
+    "Carte du temps de trajet total depuis chaque carreau"
+    # gpd_carreaux a gardé l'index de df_filosofi : on y récupère les polygones
+    gpd_temps = df_filosofi[["geometry"]].join(gpd_carreaux[["temps_total"]])
+    ax = gpd_temps.plot(
+        column="temps_total",
+        cmap="Blues",
+        vmax=60,
+        linewidth=0,
+        legend=True,
+        legend_kwds={"label": "Temps de trajet total (min)", "shrink": 0.6},
+        missing_kwds={"color": "lightgrey"},
+        figsize=(10, 10),
+    )
+    ax.set_axis_off()
     return ax
