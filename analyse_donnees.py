@@ -3,13 +3,19 @@ import networkx as nx
 import pandas as pd
 
 
-def calculer_temps_trajet(graphe, destination):
-    "Temps de trajet minimal (en minutes) de chaque station vers la destination"
-    # Graphe inversé : les temps depuis la destination sont ceux vers elle
-    temps = nx.single_source_dijkstra_path_length(
-        graphe.reverse(), destination, weight="temps"
+def calculer_temps_trajet(graphe, destinations):
+    "Temps de trajet minimal (en minutes) vers la destination la plus proche"
+    # Graphe inversé : les temps depuis les destinations sont ceux vers elles
+    temps, chemins = nx.multi_source_dijkstra(
+        graphe.reverse(), set(destinations), weight="temps"
     )
-    df_temps = pd.DataFrame(list(temps.items()), columns=["stop_id", "temps_trajet"])
+    df_temps = pd.DataFrame(
+        {
+            "stop_id": list(temps),
+            "temps_trajet": list(temps.values()),
+            "station_destination": [chemins[station][0] for station in temps],
+        }
+    )
     return df_temps
 
 
@@ -28,9 +34,7 @@ def joindre_carreaux_stations(
     # En cas d'égalité de distance, sjoin_nearest renvoie plusieurs stations
     gpd_carreaux = gpd_carreaux[~gpd_carreaux.index.duplicated()]
 
-    gpd_carreaux["temps_trajet"] = gpd_carreaux["stop_id"].map(
-        df_temps.set_index("stop_id")["temps_trajet"]
-    )
+    gpd_carreaux = gpd_carreaux.join(df_temps.set_index("stop_id"), on="stop_id")
     gpd_carreaux["temps_marche"] = gpd_carreaux["distance_station"] / vitesse_marche
     gpd_carreaux["temps_total"] = (
         gpd_carreaux["temps_marche"] + gpd_carreaux["temps_trajet"]
