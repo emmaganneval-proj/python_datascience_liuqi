@@ -152,7 +152,6 @@ def generer_profil_ligne(df_profils, gpd_positions, nom_ligne, nv_idf):
         label="Le long du tracé",
         figsize=(12, 5),
     )
-    # Dégradé : image verticale découpée selon la surface sous la courbe
     surface = ax.fill_between(df_ligne["position_km"], df_ligne["nv"], color="none")
     degrade = ax.imshow(
         np.linspace(1, 0, 100).reshape(-1, 1),
@@ -168,6 +167,7 @@ def generer_profil_ligne(df_profils, gpd_positions, nom_ligne, nv_idf):
     ax.grid(axis="x", alpha=0.3)
     ax.set_xlabel("")
     ax.set_ylabel("Niveau de vie moyen le long du tracé (€ par an)")
+    ax.secondary_xaxis("top").set_xlabel("Distance le long du tracé (km)")
     ax.set_title(f"Ligne {nom_ligne}")
     return ax
 
