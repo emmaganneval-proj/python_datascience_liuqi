@@ -111,6 +111,53 @@ def generer_carte_temps(df_filosofi, gpd_carreaux):
     return ax
 
 
+def generer_nuage_distance_temps(gpd_carreaux):
+    "Temps de trajet selon la distance à vol d'oiseau, coloré par le niveau de vie"
+    ax = gpd_carreaux.drop(columns="geometry").plot.scatter(
+        x="distance_destination",
+        y="temps_total",
+        c="nv",
+        cmap="RdYlGn",
+        vmin=15_000,
+        vmax=50_000,
+        s=1,
+        figsize=(10, 6),
+    )
+    ax.set_xlabel("Distance à vol d'oiseau à Châtelet ou La Défense (km)")
+    ax.set_ylabel("Temps de trajet total (min)")
+    ax.figure.axes[-1].set_ylabel("Niveau de vie (€ par an)")
+    return ax
+
+
+def generer_graphique_connexion(df_comparaison):
+    "Niveau de vie selon la qualité de la connexion, à distance égale"
+    ax = df_comparaison.plot.bar(
+        color=["seagreen", "orange", "grey"], rot=0, figsize=(10, 5)
+    )
+    ax.set_xlabel("Distance à vol d'oiseau à Châtelet ou La Défense")
+    ax.set_ylabel("Niveau de vie moyen (€ par an)")
+    return ax
+
+
+def generer_profil_ligne(df_profils, gpd_positions, nom_ligne):
+    "Niveau de vie par tronçon le long de la ligne, avec le nom des stations"
+    df_ligne = df_profils.loc[df_profils["route_short_name"] == nom_ligne]
+    gpd_arrets = gpd_positions.loc[gpd_positions["route_short_name"] == nom_ligne]
+    ax = df_ligne.plot(
+        x="position_km",
+        y="nv",
+        color="#" + gpd_arrets["route_color"].iloc[0],
+        legend=False,
+        figsize=(12, 5),
+    )
+    ax.set_xticks(gpd_arrets["position_km"], gpd_arrets["stop_name"], rotation=90)
+    ax.grid(axis="x", alpha=0.3)
+    ax.set_xlabel("")
+    ax.set_ylabel("Niveau de vie moyen le long du tracé (€ par an)")
+    ax.set_title(f"Ligne {nom_ligne}")
+    return ax
+
+
 def enregistrer_graphique(ax, nom_fichier):
     "Enregistre la figure dans le dossier sorties/"
     os.makedirs("sorties", exist_ok=True)
