@@ -123,7 +123,7 @@ def calculer_profils_lignes(gpd_traces, gpd_centres, distance_max, longueur_tron
         )
         liste_profils.append(df_profil)
 
-    df_profils = pd.concat(liste_profils, ignore_index=True)
+    df_profils = pd.concat(liste_profils).sort_values(["route_short_name", "troncon"])
     df_profils["nv"] = df_profils["revenus"] / df_profils["population"]
     df_profils["ecart_nv"] = df_profils.groupby("route_short_name")["nv"].diff().abs()
     return df_profils
