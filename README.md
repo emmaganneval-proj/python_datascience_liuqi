@@ -10,6 +10,8 @@ Nous explorons deux axes :
 
 ## Exécution
 
+Le rapport se trouve dans le notebook Jupyter : <code>rapport_final.ipynb</code>
+
 Sur Onyxia, le notebook s'exécute sans difficulté sur une session avec au moins 15Gio de mémoire.
 
 Cloner le repo avec : 
@@ -27,3 +29,5 @@ aws s3 sync s3://t[mon_nom_de_famille]/data/ ./data/
 
 
 À noter que les données (plus de 3,5Go) ne sont téléchargées qu'une seule fois.
+
+En cas de catastrophe, il est possible de se rabattre sur le rapport de secours : <code>rapport_final_execute.ipynb</code>
