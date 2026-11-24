@@ -114,10 +114,6 @@ if __name__ == "__main__":
 
 
     #  RER 
-    df_nv = calculer_nv_par_station(gpd_carreaux)
-    nv_moyen = gpd_carreaux["ind_snv"].sum() / gpd_carreaux["ind"].sum()
-    gpd_communes = charger_communes()
-    nv_communes = calculer_nv_par_commune(gpd_centres, gpd_communes)
     lignes = {}
     for nom in ["A", "B"]:
         gpd_ligne = positionner_stations_ligne(gpd_stations, df_stations, gpd_idfm, nom)

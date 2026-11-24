@@ -355,6 +355,57 @@ def generer_graphique_montagne(
     return ax
 
 
+def creer_figure_empilee(lignes, tables, gpd_idfm=None, gpd_communes=None):
+    "Figure à une montagne par ligne, en gardant la place du plan des lignes"
+    km_max = max(df["position_km"].max() for df in tables.values())
+    # Le plan va dans le vide à droite des lignes courtes ; s'il n'y en a pas
+    # (lignes toutes aussi longues, comme les RER), dans une colonne à droite
+    debut_plan = 0.74  # en fraction de la largeur des graphiques
+    km_debut_plan = -0.3 + debut_plan * (km_max + 0.6)
+    libres = [
+        i for i, df in enumerate(tables.values())
+        if df["position_km"].max() < km_debut_plan - 0.8  # au moins 800 m d'écart
+    ]
+    avec_plan = gpd_idfm is not None and gpd_communes is not None
+
+    if avec_plan and not libres:
+        fig = plt.figure(figsize=(21, 5 * len(lignes)))
+        grille = fig.add_gridspec(len(lignes), 2, width_ratios=[16, 5])
+        axes = [fig.add_subplot(grille[i, 0]) for i in range(len(lignes))]
+        ax_plan = fig.add_subplot(grille[:, 1])
+        dessiner_plan_lignes(ax_plan, lignes, gpd_idfm, gpd_communes)
+    else:
+        fig, axes = plt.subplots(len(lignes), 1, figsize=(16, 5 * len(lignes)))
+        axes = np.atleast_1d(axes)
+    # Plan à placer dans le vide une fois la mise en page faite
+    plan_dans_le_vide = (debut_plan, libres) if avec_plan and libres else None
+    return fig, axes, km_max, plan_dans_le_vide
+
+
+def terminer_figure_empilee(
+    fig, axes, lignes, titre, plan_dans_le_vide, gpd_idfm=None, gpd_communes=None
+):
+    "Titre, mise en page et plan commun dans le vide à droite des lignes courtes"
+    fig.suptitle(titre, x=0.01, y=0.995, ha="left", fontsize=14)
+    fig.tight_layout(rect=(0, 0, 1, 0.97))  # laisse la place au titre et à la légende
+    if plan_dans_le_vide is not None:
+        debut_plan, libres = plan_dans_le_vide
+        haut = axes[libres[0]].get_position()
+        bas = axes[libres[-1]].get_position()
+        ax_plan = fig.add_axes(
+            [haut.x0 + debut_plan * haut.width, bas.y0,
+             (1 - debut_plan) * haut.width, haut.y1 - bas.y0]
+        )
+        dessiner_plan_lignes(ax_plan, lignes, gpd_idfm, gpd_communes)
+    return axes
+
+
+def lister_lignes(lignes):
+    "« 1, 9, 13 et 14 » à partir des noms des lignes"
+    noms = list(lignes)
+    return noms[0] if len(noms) == 1 else ", ".join(noms[:-1]) + " et " + noms[-1]
+
+
 def generer_montagnes_empilees(
     lignes, df_nv, nv_moyen, nv_communes=None, gpd_idfm=None, gpd_communes=None
 ):
@@ -370,28 +421,9 @@ def generer_montagnes_empilees(
     bornes = bornes_verticales(
         [tous_carreaux["nv"], *(df["nv"] for df in tables.values())]
     )
-    km_max = max(df["position_km"].max() for df in tables.values())
-
-    # Le plan va dans le vide à droite des lignes courtes ; s'il n'y en a pas
-    # (lignes toutes aussi longues, comme les RER), dans une colonne à droite
-    debut_plan = 0.74  # en fraction de la largeur des graphiques
-    km_debut_plan = -0.3 + debut_plan * (km_max + 0.6)
-    libres = [
-        i for i, df in enumerate(tables.values())
-        if df["position_km"].max() < km_debut_plan - 0.8  # au moins 800 m d'écart
-    ]
-    avec_plan = gpd_idfm is not None and gpd_communes is not None
-    colonne_plan = avec_plan and not libres
-
-    if colonne_plan:
-        fig = plt.figure(figsize=(21, 5 * len(lignes)))
-        grille = fig.add_gridspec(len(lignes), 2, width_ratios=[16, 5])
-        axes = [fig.add_subplot(grille[i, 0]) for i in range(len(lignes))]
-        ax_plan = fig.add_subplot(grille[:, 1])
-        dessiner_plan_lignes(ax_plan, lignes, gpd_idfm, gpd_communes)
-    else:
-        fig, axes = plt.subplots(len(lignes), 1, figsize=(16, 5 * len(lignes)))
-        axes = np.atleast_1d(axes)
+    fig, axes, km_max, plan = creer_figure_empilee(
+        lignes, tables, gpd_idfm, gpd_communes
+    )
     for ax, (nom, df) in zip(axes, tables.items()):
         _, couleur, df_carreaux = lignes[nom]
         dessiner_montagne(
@@ -400,28 +432,72 @@ def generer_montagnes_empilees(
         ax.set_xlim(-0.3, km_max + 0.3)
         ax.set_ylim(bornes)
         ajouter_pastille_titre(ax, nom, couleur, pad=55)
-    noms = list(lignes)
-    liste = noms[0] if len(noms) == 1 else ", ".join(noms[:-1]) + " et " + noms[-1]
-    fig.suptitle(
-        f"Niveau de vie le long des lignes {liste}",
-        x=0.01, y=0.995, ha="left", fontsize=14,
-    )
     # Légende commune, sous le titre général : libère la place pour les plans
     ajouter_legende_montagne(
         axes[0], cible=fig, loc="upper left", bbox_to_anchor=(0.01, 0.985), ncol=3
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.97))  # laisse la place au titre et à la légende
+    return terminer_figure_empilee(
+        fig, axes, lignes, f"Niveau de vie le long des lignes {lister_lignes(lignes)}",
+        plan, gpd_idfm, gpd_communes,
+    )
 
-    # Un seul plan pour toutes les lignes, dans le vide à droite des lignes courtes
-    if avec_plan and libres:
-        haut = axes[libres[0]].get_position()
-        bas = axes[libres[-1]].get_position()
-        ax_plan = fig.add_axes(
-            [haut.x0 + debut_plan * haut.width, bas.y0,
-             (1 - debut_plan) * haut.width, haut.y1 - bas.y0]
-        )
-        dessiner_plan_lignes(ax_plan, lignes, gpd_idfm, gpd_communes)
-    return axes
+
+def dessiner_montagne_population(ax, df, couleur, population_moyenne):
+    "Montagne du nombre d'habitants rattachés à chaque station (df : stations ordonnées)"
+    x, y = df["position_km"], df["population"]
+    ax.fill_between(x, y, color=couleur, alpha=0.35, linewidth=0, zorder=1)
+    ax.plot(
+        x, y, color=couleur, linewidth=2.5, zorder=3,
+        path_effects=[effets.withStroke(linewidth=4, foreground="#222222")],
+        label="Habitants rattachés à la station",
+    )
+    ax.scatter(x, y, color="white", edgecolor="black", s=30, zorder=4)
+    ax.axhline(
+        population_moyenne, color="dimgray", linestyle="--", linewidth=1, zorder=2,
+        label="Moyenne des stations de métro et de RER",
+    )
+    ax.set_xticks(x)
+    taille = 8 if len(df) <= 30 else 7
+    ax.set_xticklabels(df["stop_name"], rotation=60, ha="right", fontsize=taille)
+    ax.set_ylabel("Habitants rattachés")
+    ax.yaxis.set_major_formatter(lambda v, _: f"{v:,.0f}".replace(",", " "))
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.grid(axis="y", alpha=0.3)
+    if "commune" in df.columns:
+        ajouter_communes_graphique(ax, df)  # sans moyennes de commune
+    return ax
+
+
+def generer_montagnes_population(lignes, df_nv, gpd_idfm=None, gpd_communes=None):
+    "Une montagne par ligne : nombre d'habitants dont c'est la station la plus proche"
+    # lignes : dictionnaire {nom de la ligne: (gpd_ligne, couleur, ...)}
+    tables = {
+        nom: gpd_ligne.join(df_nv["population"], on="stop_id")
+        for nom, (gpd_ligne, *_) in lignes.items()
+    }
+    # Repère : moyenne sur toutes les stations de métro et de RER
+    population_moyenne = df_nv["population"].mean()
+    # Une population part toujours de 0 ; même hauteur pour toutes les lignes
+    haut = max(df["population"].max() for df in tables.values()) * 1.08
+    fig, axes, km_max, plan = creer_figure_empilee(
+        lignes, tables, gpd_idfm, gpd_communes
+    )
+    for ax, (nom, df) in zip(axes, tables.items()):
+        couleur = lignes[nom][1]
+        dessiner_montagne_population(ax, df, couleur, population_moyenne)
+        ax.set_xlim(-0.3, km_max + 0.3)
+        ax.set_ylim(0, haut)
+        ajouter_pastille_titre(ax, nom, couleur, pad=55)
+    poignees, etiquettes = axes[0].get_legend_handles_labels()
+    fig.legend(
+        poignees, etiquettes, loc="upper left", bbox_to_anchor=(0.01, 0.985),
+        ncol=3, fontsize=8, frameon=False,
+    )
+    return terminer_figure_empilee(
+        fig, axes, lignes,
+        f"Habitants rattachés aux stations des lignes {lister_lignes(lignes)}",
+        plan, gpd_idfm, gpd_communes,
+    )
 
 
 def ajouter_communes_graphique(ax, df, nv_communes=None):
