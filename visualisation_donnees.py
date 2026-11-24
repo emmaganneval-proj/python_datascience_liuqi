@@ -245,20 +245,69 @@ def dessiner_montagne(ax, df, df_carreaux, couleur, nv_moyen, norme, nv_communes
     return ax
 
 
-def ajouter_legende_montagne(ax):
-    "Légende, avec une case rouge-vert pour les carreaux"
+def ajouter_legende_montagne(ax, cible=None, **options):
+    "Légende, avec une case rouge-vert pour les carreaux (sur ax, ou sur cible)"
     palette = plt.get_cmap("RdYlGn")
     poignees, etiquettes = ax.get_legend_handles_labels()
     carreaux = (Patch(color=palette(0.1)), Patch(color=palette(0.9)))
-    ax.legend(
+    options = {"loc": "upper right", "fontsize": 8, "frameon": False, **options}
+    (cible or ax).legend(
         [carreaux, *poignees],
         ["Carreaux de 200 m traversés : écart à la moyenne Île-de-France",
          *etiquettes],
         handler_map={tuple: HandlerTuple(ndivide=None, pad=0)},
-        loc="upper right",
-        fontsize=8,
-        frameon=False,
+        **options,
     )
+    return ax
+
+
+def dessiner_plan_lignes(ax, lignes, gpd_idfm, gpd_communes):
+    "Plan de Paris : réseau de métro en gris, et chaque ligne dans sa couleur"
+    # lignes : dictionnaire {nom de la ligne: (gpd_ligne, couleur, ...)}
+    # Fond : Paris et les communes à moins de 2,5 km des lignes (la silhouette
+    # suit les lignes), Paris un peu plus foncé
+    traces_lignes = gpd_idfm[gpd_idfm["route_short_name"].isin(list(lignes))]
+    couloir = traces_lignes.union_all().buffer(2500)
+    paris = gpd_communes[gpd_communes["nom"].str.startswith("Paris")]
+    proches = gpd_communes.index[gpd_communes.intersects(couloir)]
+    fond = gpd_communes.loc[proches.union(paris.index)]
+    fond.plot(ax=ax, color="#f4f4f4", edgecolor="white", linewidth=0.3)
+    paris.plot(ax=ax, color="#e4e4e4", edgecolor="white", linewidth=0.5)
+    paris.dissolve().boundary.plot(ax=ax, color="black", linewidth=0.8)
+    # Tout le réseau en gris, limité au fond
+    gpd_idfm.clip(fond.union_all()).plot(ax=ax, color="#c8c8c8", linewidth=0.5)
+
+    bornes = [fond.total_bounds]
+    for nom, (gpd_ligne, couleur, *_) in lignes.items():
+        traces = gpd_idfm[gpd_idfm["route_short_name"] == nom]
+        traces.plot(ax=ax, color="#222222", linewidth=3.5)  # contour foncé
+        traces.plot(ax=ax, color=couleur, linewidth=2.2)
+        gpd_ligne.plot(
+            ax=ax, color="white", edgecolor="black", markersize=5, linewidth=0.4,
+            zorder=5,
+        )
+        # Pastille au terminus de départ (0 km) : indique aussi le sens de lecture
+        depart = gpd_ligne.geometry.iloc[0]
+        clair = np.dot(mcolors.to_rgb(couleur), [0.299, 0.587, 0.114]) > 0.6
+        ax.text(
+            depart.x, depart.y, nom, ha="center", va="center", fontsize=8,
+            fontweight="bold", color="black" if clair else "white", zorder=6,
+            bbox={"boxstyle": "round,pad=0.25", "facecolor": couleur, "edgecolor": "none"},
+        )
+        bornes.append(traces.total_bounds)
+
+    # Cadre : le fond et toutes les lignes, avec une marge
+    bornes = np.vstack(bornes)
+    xmin, ymin = bornes[:, :2].min(axis=0) - 1000
+    xmax, ymax = bornes[:, 2:].max(axis=0) + 1000
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+    ax.set_aspect("equal")
+    # Pas d'axes, mais un fond blanc opaque : masque ce qu'il y a dessous
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.spines[:].set_visible(False)
+    ax.set_facecolor("white")
     return ax
 
 
@@ -278,12 +327,23 @@ def ajouter_pastille_titre(ax, ligne, couleur, pad=70):
 
 
 def generer_graphique_montagne(
-    gpd_ligne, df_nv, df_carreaux, nv_moyen, couleur, ligne, nv_communes=None
+    gpd_ligne, df_nv, df_carreaux, nv_moyen, couleur, ligne, nv_communes=None,
+    gpd_idfm=None, gpd_communes=None,
 ):
     "Profil du niveau de vie le long d'une ligne : une « montagne » de carreaux"
     df = gpd_ligne.join(df_nv["nv"], on="stop_id")
     norme = definir_norme_montagnes(df_carreaux["nv"], nv_moyen)
-    _, ax = plt.subplots(figsize=(14, 6))
+    if gpd_idfm is None or gpd_communes is None:
+        _, ax = plt.subplots(figsize=(14, 6))
+    else:
+        # Petit plan de la ligne dans un panneau à droite, calé en bas
+        _, (ax, ax_plan) = plt.subplots(
+            1, 2, figsize=(17, 6), gridspec_kw={"width_ratios": [5, 1]}
+        )
+        dessiner_plan_lignes(
+            ax_plan, {ligne: (gpd_ligne, couleur)}, gpd_idfm, gpd_communes
+        )
+        ax_plan.set_anchor("S")
     dessiner_montagne(ax, df, df_carreaux, couleur, nv_moyen, norme, nv_communes)
     ax.set_xlim(-0.3, df["position_km"].max() + 0.3)
     ax.set_ylim(bornes_verticales([df_carreaux["nv"], df["nv"]]))
@@ -295,7 +355,9 @@ def generer_graphique_montagne(
     return ax
 
 
-def generer_montagnes_empilees(lignes, df_nv, nv_moyen, nv_communes=None):
+def generer_montagnes_empilees(
+    lignes, df_nv, nv_moyen, nv_communes=None, gpd_idfm=None, gpd_communes=None
+):
     "Une montagne par ligne, les unes sous les autres, à la même échelle"
     # lignes : dictionnaire {nom de la ligne: (gpd_ligne, couleur, df_carreaux)}
     tables = {
@@ -310,7 +372,26 @@ def generer_montagnes_empilees(lignes, df_nv, nv_moyen, nv_communes=None):
     )
     km_max = max(df["position_km"].max() for df in tables.values())
 
-    fig, axes = plt.subplots(len(lignes), 1, figsize=(16, 5 * len(lignes)))
+    # Le plan va dans le vide à droite des lignes courtes ; s'il n'y en a pas
+    # (lignes toutes aussi longues, comme les RER), dans une colonne à droite
+    debut_plan = 0.74  # en fraction de la largeur des graphiques
+    km_debut_plan = -0.3 + debut_plan * (km_max + 0.6)
+    libres = [
+        i for i, df in enumerate(tables.values())
+        if df["position_km"].max() < km_debut_plan - 0.8  # au moins 800 m d'écart
+    ]
+    avec_plan = gpd_idfm is not None and gpd_communes is not None
+    colonne_plan = avec_plan and not libres
+
+    if colonne_plan:
+        fig = plt.figure(figsize=(21, 5 * len(lignes)))
+        grille = fig.add_gridspec(len(lignes), 2, width_ratios=[16, 5])
+        axes = [fig.add_subplot(grille[i, 0]) for i in range(len(lignes))]
+        ax_plan = fig.add_subplot(grille[:, 1])
+        dessiner_plan_lignes(ax_plan, lignes, gpd_idfm, gpd_communes)
+    else:
+        fig, axes = plt.subplots(len(lignes), 1, figsize=(16, 5 * len(lignes)))
+        axes = np.atleast_1d(axes)
     for ax, (nom, df) in zip(axes, tables.items()):
         _, couleur, df_carreaux = lignes[nom]
         dessiner_montagne(
@@ -319,12 +400,27 @@ def generer_montagnes_empilees(lignes, df_nv, nv_moyen, nv_communes=None):
         ax.set_xlim(-0.3, km_max + 0.3)
         ax.set_ylim(bornes)
         ajouter_pastille_titre(ax, nom, couleur, pad=55)
-    ajouter_legende_montagne(axes[0])
+    noms = list(lignes)
+    liste = noms[0] if len(noms) == 1 else ", ".join(noms[:-1]) + " et " + noms[-1]
     fig.suptitle(
-        f"Niveau de vie le long de {len(lignes)} lignes de métro",
-        x=0.01, ha="left", fontsize=14,
+        f"Niveau de vie le long des lignes {liste}",
+        x=0.01, y=0.995, ha="left", fontsize=14,
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.985))  # laisse la place au titre général
+    # Légende commune, sous le titre général : libère la place pour les plans
+    ajouter_legende_montagne(
+        axes[0], cible=fig, loc="upper left", bbox_to_anchor=(0.01, 0.985), ncol=3
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.97))  # laisse la place au titre et à la légende
+
+    # Un seul plan pour toutes les lignes, dans le vide à droite des lignes courtes
+    if avec_plan and libres:
+        haut = axes[libres[0]].get_position()
+        bas = axes[libres[-1]].get_position()
+        ax_plan = fig.add_axes(
+            [haut.x0 + debut_plan * haut.width, bas.y0,
+             (1 - debut_plan) * haut.width, haut.y1 - bas.y0]
+        )
+        dessiner_plan_lignes(ax_plan, lignes, gpd_idfm, gpd_communes)
     return axes
 
 
@@ -339,8 +435,18 @@ def ajouter_communes_graphique(ax, df, nv_communes=None):
     )
     # Frontière à mi-chemin entre la dernière station d'un bloc et la suivante
     frontieres = (blocs["fin"].iloc[:-1].values + blocs["debut"].iloc[1:].values) / 2
-    for x in frontieres:
-        ax.axvline(x, color="gray", linestyle=":", linewidth=1, zorder=0)
+    # Entrée ou sortie de Paris : trait noir plein ; autres frontières : pointillés
+    dans_paris = blocs["commune"].str.startswith("Paris").values
+    premiere_limite = True
+    for x, avant, apres in zip(frontieres, dans_paris[:-1], dans_paris[1:]):
+        if avant != apres:
+            ax.axvline(
+                x, color="black", linewidth=1.5, zorder=2.6,
+                label="Limite de Paris" if premiere_limite else None,
+            )
+            premiere_limite = False
+        else:
+            ax.axvline(x, color="gray", linestyle=":", linewidth=1, zorder=0)
     blocs["gauche"] = [blocs["debut"].iloc[0], *frontieres]
     blocs["droite"] = [*frontieres, blocs["fin"].iloc[-1]]
 
