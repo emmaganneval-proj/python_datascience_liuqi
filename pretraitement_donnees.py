@@ -49,16 +49,21 @@ def telecharger_zip(url, nom_dossier):
     os.remove("data/tmp.zip")
 
 
-def telecharger_fichier(url, nom_fichier):
+def telecharger_fichier(url, nom_fichier, nb_essais=5):
     """Télécharge un fichier dans le dossier /data"""
     if os.path.exists(f"data/{nom_fichier}"):
         return
     os.makedirs("data", exist_ok=True)
-    with (
-        urllib.request.urlopen(url) as response,
-        open(f"data/{nom_fichier}", "wb") as fichier_sortie,
-    ):
-        fichier_sortie.write(response.read())
+    for _ in range(nb_essais):
+        with urllib.request.urlopen(url) as response:
+            contenu = response.read()
+        # Le serveur de l'Insee coupe parfois le transfert sans erreur :
+        # un fichier parquet complet se termine toujours par "PAR1"
+        if not nom_fichier.endswith(".parquet") or contenu.endswith(b"PAR1"):
+            with open(f"data/{nom_fichier}", "wb") as fichier_sortie:
+                fichier_sortie.write(contenu)
+            return
+    raise OSError(f"Téléchargement incomplet de {url} après {nb_essais} essais")
 
 
 def charger_filosofi(path):
