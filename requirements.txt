@@ -3,11 +3,13 @@ matplotlib==3.11.2
 networkx==3.7
 numpy==2.5.4
 pandas==3.0.6
+pyarrow==26.0.1
 pyogrio==0.13.0
 # Sous macOS 13, seule la 3.6.1 s'installe (pas de version précompilée plus récente),
 # ce qui limite Python à 3.12 sur Mac ; ailleurs, une version récente convient.
 pyproj==3.6.1 ; sys_platform == "darwin"
 pyproj>=3.7 ; sys_platform != "darwin"
 shapely==2.2.0
+statsmodels==0.15.0
 # Pour exécuter le notebook rapport_final.ipynb
 ipykernel==7.4.0
