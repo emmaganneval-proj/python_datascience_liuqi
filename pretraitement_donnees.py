@@ -315,3 +315,36 @@ def charger_communes(path="data/communes.gpkg"):
     os.makedirs("data", exist_ok=True)
     gpd_communes.to_file(path)
     return gpd_communes
+
+
+# ===== FONCTION : CHARGER LES LIGNES (MÉTRO, RER, TRANSILIEN, TRAM) =====
+def charger_routes_etendu(path, modes=("metro", "rer", "transilien", "tram")):
+    """Comme charger_routes (pretraitement_donnees.py), avec le Transilien et le tram en plus.
+    modes : les types de lignes à garder"""
+    df_routes = pd.read_csv(
+        f"{path}/routes.txt",
+        usecols=["route_id", "route_type", "route_short_name",
+                 "route_color", "route_text_color", "agency_id"],
+    )
+
+    # On ajoute le nom de l'opérateur de chaque ligne (RATP, RER, Transilien, TER...)
+    agences = pd.read_csv(f"{path}/agency.txt", usecols=["agency_id", "agency_name"])
+    df_routes = df_routes.merge(agences, on="agency_id")
+
+    # On donne un type à chaque ligne
+    conditions = [
+        df_routes["route_type"] == 1,                                                # métro
+        (df_routes["route_type"] == 2) & (df_routes["agency_name"] == "RER"),        # RER
+        (df_routes["route_type"] == 2) & (df_routes["agency_name"] == "Transilien"), # Transilien
+        df_routes["route_type"] == 0,                                                # tram
+    ]
+    df_routes["mode"] = np.select(conditions, ["metro", "rer", "transilien", "tram"], default="autre")
+    # -> les TER tombent dans "autre" et sont donc écartés
+
+    # On retire le CDG VAL (navette interne de l'aéroport de Roissy)
+    df_routes = df_routes[df_routes["route_short_name"] != "CDG VAL"]
+
+    # Couleur grise pour les lignes qui n'en ont pas
+    df_routes["route_color"] = df_routes["route_color"].fillna("888888")
+
+    return df_routes[df_routes["mode"].isin(modes)]
