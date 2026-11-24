@@ -10,7 +10,11 @@ from shapely.geometry import LineString
 
 URL_ZIP_IDFM = "https://files.mobilitydatabase.org/tdg-80921/tdg-80921-202610140154/tdg-80921-202610140154.zip"
 URL_ZIP_FILOSOFI = "https://www.insee.fr/fr/statistiques/fichier/8735162/Filosofi2021_carreaux_200m_shp.zip"
-URL_MOBPRO = "https://www.insee.fr/fr/statistiques/fichier/9004795/RP2023_mobpro.parquet"
+URL_MOBPRO = (
+    "https://www.insee.fr/fr/statistiques/fichier/9004795/RP2023_mobpro.parquet"
+)
+URL_COMMUNES = "https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions/ile-de-france/communes-ile-de-france.geojson"
+URL_ARRONDISSEMENTS = "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/arrondissements/exports/geojson"
 
 NOMS_CSP = {
     "1": "Agriculteurs",
@@ -355,10 +359,6 @@ def construire_positions_stations(df_stations, gpd_traces):
     return gpd_positions
 
 
-URL_COMMUNES = "https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions/ile-de-france/communes-ile-de-france.geojson"
-URL_ARRONDISSEMENTS = "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/arrondissements/exports/geojson"
-
-
 def charger_communes(path="data/communes.gpkg"):
     "Contours des communes d'Île-de-France, avec Paris découpé en arrondissements"
     if os.path.exists(path):
@@ -369,8 +369,10 @@ def charger_communes(path="data/communes.gpkg"):
 
     gpd_arr = gpd.read_file(URL_ARRONDISSEMENTS)
     gpd_arr["code_commune"] = gpd_arr["c_arinsee"].astype(int).astype(str)
-    gpd_arr["nom"] = gpd_arr["c_ar"].astype(int).map(
-        lambda n: "Paris 1er" if n == 1 else f"Paris {n}e"
+    gpd_arr["nom"] = (
+        gpd_arr["c_ar"]
+        .astype(int)
+        .map(lambda n: "Paris 1er" if n == 1 else f"Paris {n}e")
     )
 
     gpd_communes = pd.concat(
@@ -387,8 +389,14 @@ def charger_routes_etendu(path, modes=("metro", "rer", "transilien", "tram")):
     modes : les types de lignes à garder"""
     df_routes = pd.read_csv(
         f"{path}/routes.txt",
-        usecols=["route_id", "route_type", "route_short_name",
-                 "route_color", "route_text_color", "agency_id"],
+        usecols=[
+            "route_id",
+            "route_type",
+            "route_short_name",
+            "route_color",
+            "route_text_color",
+            "agency_id",
+        ],
     )
 
     # On ajoute le nom de l'opérateur de chaque ligne (RATP, RER, Transilien, TER...)
@@ -397,12 +405,15 @@ def charger_routes_etendu(path, modes=("metro", "rer", "transilien", "tram")):
 
     # On donne un type à chaque ligne
     conditions = [
-        df_routes["route_type"] == 1,                                                # métro
-        (df_routes["route_type"] == 2) & (df_routes["agency_name"] == "RER"),        # RER
-        (df_routes["route_type"] == 2) & (df_routes["agency_name"] == "Transilien"), # Transilien
-        df_routes["route_type"] == 0,                                                # tram
+        df_routes["route_type"] == 1,  # métro
+        (df_routes["route_type"] == 2) & (df_routes["agency_name"] == "RER"),  # RER
+        (df_routes["route_type"] == 2)
+        & (df_routes["agency_name"] == "Transilien"),  # Transilien
+        df_routes["route_type"] == 0,  # tram
     ]
-    df_routes["mode"] = np.select(conditions, ["metro", "rer", "transilien", "tram"], default="autre")
+    df_routes["mode"] = np.select(
+        conditions, ["metro", "rer", "transilien", "tram"], default="autre"
+    )
     # -> les TER tombent dans "autre" et sont donc écartés
 
     # On retire le CDG VAL (navette interne de l'aéroport de Roissy)
