@@ -1,4 +1,10 @@
+import matplotlib.pyplot as plt
+
 from analyse_donnees import (
+    ajouter_communes_stations,
+    calculer_carreaux_traverses,
+    calculer_nv_par_commune,
+    calculer_nv_par_station,
     calculer_distance_destinations,
     calculer_nv_par_tranche_temps,
     calculer_profils_lignes,
@@ -6,11 +12,13 @@ from analyse_donnees import (
     comparer_heterogeneite_lignes,
     comparer_nv_a_distance_egale,
     joindre_carreaux_stations,
+    positionner_stations_ligne,
 )
 from pretraitement_donnees import (
     URL_ZIP_FILOSOFI,
     URL_ZIP_IDFM,
     charger_arrets,
+    charger_communes,
     charger_filosofi,
     charger_horaires,
     charger_parcours,
@@ -38,6 +46,8 @@ from visualisation_donnees import (
     enregistrer_graphique,
     generer_carte_filosofi,
     generer_carte_temps,
+    generer_graphique_montagne,
+    generer_montagnes_empilees,
     generer_graphique_connexion,
     generer_graphique_tranches,
     generer_nuage_distance_temps,
@@ -104,42 +114,6 @@ if __name__ == "__main__":
     ax.set_xlim(XLIM)
     ax.set_ylim(YLIM)
 
-    # Montagnes : niveau de vie le long des lignes (stations et carreaux traversés)
-    df_nv = calculer_nv_par_station(gpd_carreaux)
-    nv_moyen = gpd_carreaux["ind_snv"].sum() / gpd_carreaux["ind"].sum()
-    gpd_communes = charger_communes()
-    nv_communes = calculer_nv_par_commune(gpd_centres, gpd_communes)
-    lignes = {}
-    for nom in ["1", "9", "13", "14"]:
-        gpd_ligne = positionner_stations_ligne(gpd_stations, df_stations, gpd_idfm, nom)
-        gpd_ligne = ajouter_communes_stations(gpd_ligne, gpd_communes)
-        df_carreaux = calculer_carreaux_traverses(df_filosofi, gpd_ligne, gpd_idfm, nom)
-        filtre = df_routes["route_short_name"] == nom
-        couleur = "#" + df_routes.loc[filtre, "route_color"].iloc[0]
-        lignes[nom] = (gpd_ligne, couleur, df_carreaux)
-
-    axes = generer_montagnes_empilees(
-        lignes, df_nv, nv_moyen, nv_communes, gpd_idfm, gpd_communes
-    )
-    enregistrer_graphique(axes[0], "Metros 1, 9, 13 et 14 : montagnes_empilees")
-    plt.show()
-
-
-    #  RER 
-    lignes = {}
-    for nom in ["A", "B"]:
-        gpd_ligne = positionner_stations_ligne(gpd_stations, df_stations, gpd_idfm, nom)
-        gpd_ligne = ajouter_communes_stations(gpd_ligne, gpd_communes)
-        df_carreaux = calculer_carreaux_traverses(df_filosofi, gpd_ligne, gpd_idfm, nom)
-        filtre = df_routes["route_short_name"] == nom
-        couleur = "#" + df_routes.loc[filtre, "route_color"].iloc[0]
-        lignes[nom] = (gpd_ligne, couleur, df_carreaux)
-
-    axes = generer_montagnes_empilees(
-        lignes, df_nv, nv_moyen, nv_communes, gpd_idfm, gpd_communes
-    )
-    enregistrer_graphique(axes[0], "RER A et B : montagnes_empilees")
-    plt.show()
     enregistrer_graphique(ax, "carte_temps_trajet")
 
     gpd_carreaux = calculer_distance_destinations(
@@ -164,3 +138,39 @@ if __name__ == "__main__":
         ax = generer_profil_ligne(df_profils, gpd_positions, nom_ligne, nv_idf)
         enregistrer_graphique(ax, f"profil_ligne_{nom_ligne}")
     df_heterogeneite = comparer_heterogeneite_lignes(df_profils)
+
+    # Montagnes : niveau de vie le long des lignes (stations et carreaux traversés)
+    df_nv = calculer_nv_par_station(gpd_carreaux)
+    nv_moyen = gpd_carreaux["ind_snv"].sum() / gpd_carreaux["ind"].sum()
+    gpd_communes = charger_communes()
+    nv_communes = calculer_nv_par_commune(gpd_centres, gpd_communes)
+    lignes = {}
+    for nom in ["1", "9", "13", "14"]:
+        gpd_ligne = positionner_stations_ligne(gpd_stations, df_stations, gpd_idfm, nom)
+        gpd_ligne = ajouter_communes_stations(gpd_ligne, gpd_communes)
+        df_carreaux = calculer_carreaux_traverses(df_filosofi, gpd_ligne, gpd_idfm, nom)
+        filtre = df_routes["route_short_name"] == nom
+        couleur = "#" + df_routes.loc[filtre, "route_color"].iloc[0]
+        lignes[nom] = (gpd_ligne, couleur, df_carreaux)
+
+    axes = generer_montagnes_empilees(
+        lignes, df_nv, nv_moyen, nv_communes, gpd_idfm, gpd_communes
+    )
+    enregistrer_graphique(axes[0], "Metros 1, 9, 13 et 14 : montagnes_empilees")
+    plt.show()
+
+    # RER
+    lignes = {}
+    for nom in ["A", "B"]:
+        gpd_ligne = positionner_stations_ligne(gpd_stations, df_stations, gpd_idfm, nom)
+        gpd_ligne = ajouter_communes_stations(gpd_ligne, gpd_communes)
+        df_carreaux = calculer_carreaux_traverses(df_filosofi, gpd_ligne, gpd_idfm, nom)
+        filtre = df_routes["route_short_name"] == nom
+        couleur = "#" + df_routes.loc[filtre, "route_color"].iloc[0]
+        lignes[nom] = (gpd_ligne, couleur, df_carreaux)
+
+    axes = generer_montagnes_empilees(
+        lignes, df_nv, nv_moyen, nv_communes, gpd_idfm, gpd_communes
+    )
+    enregistrer_graphique(axes[0], "RER A et B : montagnes_empilees")
+    plt.show()
