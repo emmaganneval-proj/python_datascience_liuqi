@@ -14,6 +14,8 @@ URL_ZIP_FILOSOFI = "https://www.insee.fr/fr/statistiques/fichier/8735162/Filosof
 
 def telecharger_zip(url, nom_dossier):
     """Télécharge un zip et le décompresse dans le dossier /data/{nom_dossier}"""
+    if os.path.exists(f"data/{nom_dossier}"):
+        return
     os.makedirs("data", exist_ok=True)
     with (
         urllib.request.urlopen(url) as response,
