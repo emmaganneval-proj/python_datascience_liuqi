@@ -1,5 +1,6 @@
 """Régressions : temps de trajet, distance à Châtelet et niveau de vie"""
 import matplotlib.pyplot as plt
+import geopandas as gpd   
 import numpy as np
 import statsmodels.formula.api as smf
 
@@ -125,3 +126,137 @@ def graphique_niveau_vie(carreaux):
         print(m.summary2().tables[1][["Coef.", "Std.Err.", "P>|t|"]].round(3))
         print(f"R² = {m.rsquared:.3f}\n")
     return m_dist, m_temps
+
+    # ===================== CARTES =====================
+
+# Épaisseur du trait selon le type de ligne
+EPAISSEUR = {"metro": 1, "tram": 0.8, "transilien": 1.5, "rer": 2.5}
+
+
+def part_par_zone(df_mob, indicateur):
+    """Part (en %) d'un indicateur parmi les actifs de chaque commune
+    (ou de chaque arrondissement pour Paris).
+    indicateur : une CSP ("Ouvriers", "Cadres"...) ou "Transports en commun"."""
+    if indicateur == "Transports en commun":
+        cible = df_mob["tc"]
+    else:
+        cible = df_mob["CSP"] == indicateur
+
+    # Part pondérée : poids des personnes concernées / poids de tous les actifs
+    somme_cible = (df_mob["IPONDI"] * cible).groupby(df_mob["code_geo"]).sum()
+    somme_total = df_mob.groupby("code_geo")["IPONDI"].sum()
+    return (somme_cible / somme_total * 100).round(1).rename("part")
+
+
+def carte(indicateur, df_mob, communes, arr, gpd_idfm, gpd_stations_lignes,
+          zone="paris", ligne=None, reseau=False, cmap="Reds"):
+    """Carte colorée selon un indicateur (en % des actifs).
+    zone   : "paris" (20 arrondissements) ou "idf" (toutes les communes)
+    ligne  : numéro d'une ligne à superposer, par exemple "B" (facultatif)
+    reseau : True pour tout le réseau, ou une liste de types, ex. ["rer", "transilien"]"""
+
+    # 1. Le fond de carte selon la zone choisie
+    if zone == "paris":
+        fond = arr
+    elif zone == "idf":
+        fond = communes
+    else:
+        raise ValueError('zone doit valoir "paris" ou "idf"')
+
+    part = part_par_zone(df_mob, indicateur)
+    fond = fond.merge(part, left_on="INSEE_COM", right_index=True, how="left")
+
+    ax = fond.plot(
+        column="part", cmap=cmap, legend=True,
+        edgecolor="white",
+        linewidth=0.8 if zone == "paris" else 0.1,
+        figsize=(12, 10),
+        missing_kwds={"color": "lightgrey"},
+        legend_kwds={"label": f"{indicateur} parmi les actifs (%)", "shrink": 0.6},
+    )
+
+    # 2a. Paris : nom et valeur de chaque arrondissement
+    if zone == "paris":
+        for _, r in fond.iterrows():
+            p = r.geometry.representative_point()
+            ax.annotate(f"{r['nom']}\n{r['part']} %", (p.x, p.y),
+                        ha="center", va="center", fontsize=7)
+
+    # 2b. IDF : contours des départements en noir + leur numéro
+    if zone == "idf":
+        departements = (
+            communes.assign(dep=communes["INSEE_COM"].str[:2])
+            .dissolve(by="dep").reset_index()
+        )
+        departements.boundary.plot(ax=ax, color="black", linewidth=1, zorder=2)
+        for _, d in departements.iterrows():
+            p = d.geometry.representative_point()
+            ax.annotate(d["dep"], (p.x, p.y), ha="center", va="center",
+                        fontsize=11, fontweight="bold", color="black")
+
+    # 3a. Le réseau (facultatif), sans les arrêts
+    if reseau:
+        lignes = gpd_idfm if reseau is True else gpd_idfm[gpd_idfm["mode"].isin(reseau)]
+        epaisseur = lignes["mode"].map(EPAISSEUR).values
+        lignes.plot(ax=ax, color="white", linewidth=epaisseur + 1.5, zorder=3)
+        lignes.plot(ax=ax, color="#" + lignes["route_color"], linewidth=epaisseur, zorder=4)
+
+    # 3b. Une seule ligne (facultative), avec un liseré blanc, et ses stations
+    if ligne is not None:
+        trace = gpd_idfm[gpd_idfm["route_short_name"] == ligne]
+        trace.plot(ax=ax, color="white", linewidth=7, zorder=3)
+        trace.plot(ax=ax, color="#" + trace["route_color"].iloc[0], linewidth=4, zorder=4)
+        gpd_stations_lignes[gpd_stations_lignes["route_short_name"] == ligne].plot(
+            ax=ax, color="white", edgecolor="black", markersize=30, zorder=5
+        )
+
+    # 4. Cadrage sur la zone (marge de 500 m)
+    xmin, ymin, xmax, ymax = fond.total_bounds
+    ax.set_xlim(xmin - 500, xmax + 500)
+    ax.set_ylim(ymin - 500, ymax + 500)
+
+    nom_zone = "Paris" if zone == "paris" else "Île-de-France"
+    titre = f"Part {indicateur.lower()} parmi les actifs ({nom_zone})"
+    if ligne is not None:
+        titre += f" - ligne {ligne}"
+    if reseau:
+        titre += " - réseau"
+    ax.set_title(titre)
+    ax.set_axis_off()
+    plt.show()
+
+def resume_ligne(ligne, indicateur, df_mob, communes, gpd_stations_lignes,
+                 zones=None, n=5, **autres):
+    """Part d'un indicateur autour des gares d'une ligne, résumée par zone.
+    ligne      : numéro de la ligne, par exemple "B"
+    indicateur : une CSP ("Ouvriers", "Cadres"...) ou "Transports en commun"
+    zones      : {nom de la zone: [départements]}, par défaut Paris contre banlieue
+    n          : nombre de gares extrêmes à afficher"""
+    if zones is None:
+        zones = {"Paris": ["75"]}
+
+    # Gares de la ligne, avec la commune (ou l'arrondissement) où elles se trouvent
+    gares = gpd_stations_lignes[gpd_stations_lignes["route_short_name"] == ligne]
+    gares = gpd.sjoin(gares, communes, predicate="within").drop_duplicates("stop_id")
+
+    # Part de l'indicateur dans la commune de chaque gare
+    gares = gares.merge(part_par_zone(df_mob, indicateur), left_on="INSEE_COM", right_index=True)
+
+    # Zone de chaque gare selon son département ("Banlieue" si non précisé)
+    dep = gares["INSEE_COM"].str[:2]
+    gares["zone"] = "Banlieue"
+    for nom_zone, departements in zones.items():
+        gares.loc[dep.isin(departements), "zone"] = nom_zone
+
+    # Résumé par zone : nombre de gares, moyenne, minimum et maximum
+    resume = gares.groupby("zone")["part"].agg(["count", "mean", "min", "max"]).round(1)
+    resume.columns = ["Gares", "Moyenne (%)", "Min (%)", "Max (%)"]
+    print(f"Ligne {ligne} : part {indicateur.lower()} parmi les actifs\n")
+    print(resume)
+
+    # Les gares extrêmes
+    colonnes = ["stop_name", "nom", "zone", "part"]
+    print(f"\nPart la plus forte :")
+    print(gares.sort_values("part", ascending=False)[colonnes].head(n).to_string(index=False))
+    print(f"\nPart la plus faible :")
+    print(gares.sort_values("part")[colonnes].head(n).to_string(index=False))
