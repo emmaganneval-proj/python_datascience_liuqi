@@ -6,6 +6,8 @@ import shapely
 import statsmodels.formula.api as smf
 from shapely.geometry import Point
 
+from pretraitement_donnees import construire_centres_carreaux
+
 
 def calculer_temps_trajet(graphe, destinations):
     "Temps de trajet minimal (en minutes) vers la destination la plus proche"
@@ -479,3 +481,92 @@ def construire_grille_nv(df_filosofi, zone, rayon=2):
         "nv_lignes": np.where(valide, nv, nv_large),
         "origine": (i0, j0),
     }
+def preparer_stations_poles(gpd_stations, graphe_reseau, noms_poles):
+    "Temps de trajet et distance à vol d'oiseau de chaque station jusqu'au pôle le plus proche"
+    destinations = gpd_stations.loc[gpd_stations["stop_name"].isin(noms_poles), "stop_id"]
+    df_temps = calculer_temps_trajet(graphe_reseau, destinations)
+
+    df_reg = gpd_stations.merge(df_temps, on="stop_id")
+    df_reg = calculer_distance_destinations(df_reg, gpd_stations, destinations).rename(
+        columns={"distance_destination": "distance_km"}
+    )
+    df_reg = df_reg[df_reg["temps_trajet"] > 0]  # on retire les pôles eux-mêmes
+    return df_reg, df_temps, destinations
+
+
+def trouver_seuil(x, y):
+    "Seuil (en km) qui sépare le mieux deux régimes linéaires"
+
+    def erreur_totale(seuil):
+        erreur = 0
+        for masque in [x < seuil, x >= seuil]:
+            p, c = np.polyfit(x[masque], y[masque], 1)
+            erreur += ((y[masque] - (c + p * x[masque])) ** 2).sum()
+        return erreur
+
+    seuils = np.arange(5, 40.5, 0.5)
+    return seuils[np.argmin([erreur_totale(s) for s in seuils])]
+
+
+def preparer_carreaux(df_filosofi, gpd_stations, df_temps, destinations):
+    "Distance et temps de trajet (marche + transports) vers le pôle le plus proche pour chaque carreau"
+    centres = construire_centres_carreaux(df_filosofi)
+    carreaux = joindre_carreaux_stations(
+        centres, gpd_stations, df_temps, distance_max=1500, vitesse_marche=75
+    )
+    carreaux = calculer_distance_destinations(carreaux, gpd_stations, destinations).rename(
+        columns={"distance_destination": "distance_km"}
+    )
+    return carreaux
+
+
+def part_par_zone(df_mob, indicateur):
+    """Part (en %) d'un indicateur parmi les actifs de chaque commune
+    (ou de chaque arrondissement pour Paris).
+    indicateur : une CSP ("Ouvriers", "Cadres"...) ou "Transports en commun"."""
+    if indicateur == "Transports en commun":
+        cible = df_mob["tc"]
+    else:
+        cible = df_mob["CSP"] == indicateur
+
+    # Part pondérée : poids des personnes concernées / poids de tous les actifs
+    somme_cible = (df_mob["IPONDI"] * cible).groupby(df_mob["code_geo"]).sum()
+    somme_total = df_mob.groupby("code_geo")["IPONDI"].sum()
+    return (somme_cible / somme_total * 100).round(1).rename("part")
+
+
+def resume_ligne(ligne, indicateur, df_mob, communes, gpd_stations_lignes,
+                 zones=None, n=5, **autres):
+    """Part d'un indicateur autour des gares d'une ligne, résumée par zone.
+    ligne      : numéro de la ligne, par exemple "B"
+    indicateur : une CSP ("Ouvriers", "Cadres"...) ou "Transports en commun"
+    zones      : {nom de la zone: [départements]}, par défaut Paris contre banlieue
+    n          : nombre de gares extrêmes à afficher"""
+    if zones is None:
+        zones = {"Paris": ["75"]}
+
+    # Gares de la ligne, avec la commune (ou l'arrondissement) où elles se trouvent
+    gares = gpd_stations_lignes[gpd_stations_lignes["route_short_name"] == ligne]
+    gares = gpd.sjoin(gares, communes, predicate="within").drop_duplicates("stop_id")
+
+    # Part de l'indicateur dans la commune de chaque gare
+    gares = gares.merge(part_par_zone(df_mob, indicateur), left_on="INSEE_COM", right_index=True)
+
+    # Zone de chaque gare selon son département ("Banlieue" si non précisé)
+    dep = gares["INSEE_COM"].str[:2]
+    gares["zone"] = "Banlieue"
+    for nom_zone, departements in zones.items():
+        gares.loc[dep.isin(departements), "zone"] = nom_zone
+
+    # Résumé par zone : nombre de gares, moyenne, minimum et maximum
+    resume = gares.groupby("zone")["part"].agg(["count", "mean", "min", "max"]).round(1)
+    resume.columns = ["Gares", "Moyenne (%)", "Min (%)", "Max (%)"]
+    print(f"Ligne {ligne} : part {indicateur.lower()} parmi les actifs\n")
+    print(resume)
+
+    # Les gares extrêmes
+    colonnes = ["stop_name", "nom", "zone", "part"]
+    print(f"\nPart la plus forte :")
+    print(gares.sort_values("part", ascending=False)[colonnes].head(n).to_string(index=False))
+    print(f"\nPart la plus faible :")
+    print(gares.sort_values("part")[colonnes].head(n).to_string(index=False))

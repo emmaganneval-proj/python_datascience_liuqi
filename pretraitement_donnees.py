@@ -1,3 +1,4 @@
+import gzip
 import os
 import urllib.request
 import zipfile
@@ -57,6 +58,10 @@ def telecharger_fichier(url, nom_fichier, nb_essais=5):
     for _ in range(nb_essais):
         with urllib.request.urlopen(url) as response:
             contenu = response.read()
+        # Le serveur de la Ville de Paris renvoie parfois le fichier compressé
+        # sans le signaler : un contenu gzip commence toujours par 1f 8b
+        if contenu.startswith(b"\x1f\x8b"):
+            contenu = gzip.decompress(contenu)
         # Le serveur de l'Insee coupe parfois le transfert sans erreur :
         # un fichier parquet complet se termine toujours par "PAR1"
         if not nom_fichier.endswith(".parquet") or contenu.endswith(b"PAR1"):
