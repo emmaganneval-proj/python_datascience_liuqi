@@ -13,3 +13,5 @@ shapely==2.2.0
 statsmodels==0.15.0
 # Pour exécuter le notebook rapport_final.ipynb
 ipykernel==7.4.0
+# Pour faire tourner le relief 3D à la souris dans le notebook (%matplotlib widget)
+ipympl==0.10.0
