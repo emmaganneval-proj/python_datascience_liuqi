@@ -92,6 +92,7 @@ if __name__ == "__main__":
     ax = generer_carte_filosofi(df_filosofi, "nv")
     ax = ajouter_lignes_graphique(ax, gpd_idfm)
     ax = ajouter_stations_graphique(df_stations, ax)
+    gpd_terminus = gpd_terminus.loc[gpd_terminus["mode"] != "tram"]
     ax = ajouter_pastilles_graphique(
         ax, gpd_terminus.cx[XLIM[0] : XLIM[1], YLIM[0] : YLIM[1]]
     )
@@ -174,3 +175,4 @@ if __name__ == "__main__":
     )
     enregistrer_graphique(axes[0], "RER A et B : montagnes_empilees")
     plt.show()
+    print(df_heterogeneite)

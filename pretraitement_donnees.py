@@ -10,6 +10,28 @@ from shapely.geometry import LineString
 
 URL_ZIP_IDFM = "https://files.mobilitydatabase.org/tdg-80921/tdg-80921-202610140154/tdg-80921-202610140154.zip"
 URL_ZIP_FILOSOFI = "https://www.insee.fr/fr/statistiques/fichier/8735162/Filosofi2021_carreaux_200m_shp.zip"
+URL_MOBPRO = (
+    "https://www.insee.fr/fr/statistiques/fichier/9004795/RP2023_mobpro.parquet"
+)
+URL_COMMUNES = "https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions/ile-de-france/communes-ile-de-france.geojson"
+URL_ARRONDISSEMENTS = "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/arrondissements/exports/geojson"
+
+NOMS_CSP = {
+    "1": "Agriculteurs",
+    "2": "Artisans, commerçants, chefs d'entreprise",
+    "3": "Cadres",
+    "4": "Professions intermédiaires",
+    "5": "Employés",
+    "6": "Ouvriers",
+}
+NOMS_MODES = {
+    "1": "Pas de transport",
+    "2": "Marche",
+    "3": "Vélo",
+    "4": "Deux-roues motorisé",
+    "5": "Voiture",
+    "6": "Transports en commun",
+}
 
 
 def telecharger_zip(url, nom_dossier):
@@ -27,6 +49,23 @@ def telecharger_zip(url, nom_dossier):
     os.remove("data/tmp.zip")
 
 
+def telecharger_fichier(url, nom_fichier, nb_essais=5):
+    """Télécharge un fichier dans le dossier /data"""
+    if os.path.exists(f"data/{nom_fichier}"):
+        return
+    os.makedirs("data", exist_ok=True)
+    for _ in range(nb_essais):
+        with urllib.request.urlopen(url) as response:
+            contenu = response.read()
+        # Le serveur de l'Insee coupe parfois le transfert sans erreur :
+        # un fichier parquet complet se termine toujours par "PAR1"
+        if not nom_fichier.endswith(".parquet") or contenu.endswith(b"PAR1"):
+            with open(f"data/{nom_fichier}", "wb") as fichier_sortie:
+                fichier_sortie.write(contenu)
+            return
+    raise OSError(f"Téléchargement incomplet de {url} après {nb_essais} essais")
+
+
 def charger_filosofi(path):
     """Chargement des données de Filosofi"""
     liste_departements = ["75", "77", "78", "91", "92", "93", "94", "95"]
@@ -37,8 +76,18 @@ def charger_filosofi(path):
     return df_filosofi
 
 
-def charger_routes(path):
-    """Chargement des lignes IDFM (métro et RER)"""
+def charger_mobpro(path):
+    """Chargement des trajets domicile-travail des actifs habitant en Île-de-France"""
+    df_mob = pd.read_parquet(
+        path,
+        columns=["COMMUNE", "ARM", "GS", "TRANS", "IPONDI"],
+        filters=[("REGION", "==", "11")],
+    )
+    return df_mob
+
+
+def charger_routes(path, modes=("metro", "rer", "transilien", "tram")):
+    """Chargement des lignes IDFM (métro, RER, Transilien et tram)"""
     df_routes = pd.read_csv(
         f"{path}/routes.txt",
         usecols=[
@@ -51,10 +100,20 @@ def charger_routes(path):
         ],
     )
 
-    filtre_metro = df_routes["route_type"] == 1
-    filtre_rer = (df_routes["route_type"] == 2) & (df_routes["agency_id"] == "IDFM:71")
-    df_routes = df_routes.loc[filtre_metro | filtre_rer]
-    df_routes["mode"] = np.where(df_routes["route_type"] == 1, "metro", "rer")
+    df_routes["mode"] = np.select(
+        [
+            df_routes["route_type"] == 1,
+            (df_routes["route_type"] == 2) & (df_routes["agency_id"] == "IDFM:71"),
+            (df_routes["route_type"] == 2) & (df_routes["agency_id"] == "IDFM:1046"),
+            df_routes["route_type"] == 0,
+        ],
+        ["metro", "rer", "transilien", "tram"],
+        default="autre",
+    )
+    # Le CDG VAL est une navette interne à l'aéroport de Roissy
+    df_routes = df_routes.loc[
+        df_routes["mode"].isin(modes) & (df_routes["route_short_name"] != "CDG VAL")
+    ]
     return df_routes
 
 
@@ -147,6 +206,18 @@ def indicateurs_filosofi(df_filosofi):
     return df_filosofi
 
 
+def indicateurs_mobpro(df_mob):
+    """Calcul de nouveaux indicateurs"""
+    df_mob["CSP"] = df_mob["GS"].map(NOMS_CSP)
+    df_mob["mode"] = df_mob["TRANS"].map(NOMS_MODES)
+    df_mob["tc"] = df_mob["mode"] == "Transports en commun"
+    # Lieu de résidence : l'arrondissement à Paris, la commune ailleurs
+    df_mob["code_geo"] = np.where(
+        df_mob["COMMUNE"] == "75056", df_mob["ARM"], df_mob["COMMUNE"]
+    )
+    return df_mob
+
+
 def definir_quantiles(df_filosofi, indicateur, nb_quantiles):
     """Calcul du quantile de la valeur d'un indicateur pour chaque carreau"""
     quantiles = np.quantile(
@@ -176,7 +247,7 @@ def definir_quantiles(df_filosofi, indicateur, nb_quantiles):
 
 
 def construire_lignes_idfm(df_parcours):
-    "Construit le tracé des lignes de métro / RER"
+    "Construit le tracé des lignes ferrées"
     df_shapes = df_parcours.groupby("shape_id").apply(
         lambda group: LineString(zip(group["shape_pt_lon"], group["shape_pt_lat"]))
     )
@@ -293,10 +364,6 @@ def construire_positions_stations(df_stations, gpd_traces):
     return gpd_positions
 
 
-URL_COMMUNES = "https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions/ile-de-france/communes-ile-de-france.geojson"
-URL_ARRONDISSEMENTS = "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/arrondissements/exports/geojson"
-
-
 def charger_communes(path="data/communes.gpkg"):
     "Contours des communes d'Île-de-France, avec Paris découpé en arrondissements"
     if os.path.exists(path):
@@ -307,8 +374,10 @@ def charger_communes(path="data/communes.gpkg"):
 
     gpd_arr = gpd.read_file(URL_ARRONDISSEMENTS)
     gpd_arr["code_commune"] = gpd_arr["c_arinsee"].astype(int).astype(str)
-    gpd_arr["nom"] = gpd_arr["c_ar"].astype(int).map(
-        lambda n: "Paris 1er" if n == 1 else f"Paris {n}e"
+    gpd_arr["nom"] = (
+        gpd_arr["c_ar"]
+        .astype(int)
+        .map(lambda n: "Paris 1er" if n == 1 else f"Paris {n}e")
     )
 
     gpd_communes = pd.concat(
@@ -317,3 +386,45 @@ def charger_communes(path="data/communes.gpkg"):
     os.makedirs("data", exist_ok=True)
     gpd_communes.to_file(path)
     return gpd_communes
+
+
+# ===== FONCTION : CHARGER LES LIGNES (MÉTRO, RER, TRANSILIEN, TRAM) =====
+def charger_routes_etendu(path, modes=("metro", "rer", "transilien", "tram")):
+    """Comme charger_routes (pretraitement_donnees.py), avec le Transilien et le tram en plus.
+    modes : les types de lignes à garder"""
+    df_routes = pd.read_csv(
+        f"{path}/routes.txt",
+        usecols=[
+            "route_id",
+            "route_type",
+            "route_short_name",
+            "route_color",
+            "route_text_color",
+            "agency_id",
+        ],
+    )
+
+    # On ajoute le nom de l'opérateur de chaque ligne (RATP, RER, Transilien, TER...)
+    agences = pd.read_csv(f"{path}/agency.txt", usecols=["agency_id", "agency_name"])
+    df_routes = df_routes.merge(agences, on="agency_id")
+
+    # On donne un type à chaque ligne
+    conditions = [
+        df_routes["route_type"] == 1,  # métro
+        (df_routes["route_type"] == 2) & (df_routes["agency_name"] == "RER"),  # RER
+        (df_routes["route_type"] == 2)
+        & (df_routes["agency_name"] == "Transilien"),  # Transilien
+        df_routes["route_type"] == 0,  # tram
+    ]
+    df_routes["mode"] = np.select(
+        conditions, ["metro", "rer", "transilien", "tram"], default="autre"
+    )
+    # -> les TER tombent dans "autre" et sont donc écartés
+
+    # On retire le CDG VAL (navette interne de l'aéroport de Roissy)
+    df_routes = df_routes[df_routes["route_short_name"] != "CDG VAL"]
+
+    # Couleur grise pour les lignes qui n'en ont pas
+    df_routes["route_color"] = df_routes["route_color"].fillna("888888")
+
+    return df_routes[df_routes["mode"].isin(modes)]

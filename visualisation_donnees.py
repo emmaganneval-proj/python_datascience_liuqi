@@ -34,13 +34,13 @@ def ajouter_lignes_graphique(ax, gpd_idfm):
     "Superposer les lignes IDFM à la carte"
     gpd_idfm.plot(
         color="#" + gpd_idfm["route_color"],
-        linewidth=np.where(gpd_idfm["mode"] == "metro", 1, 2),
+        linewidth=np.where(gpd_idfm["mode"].isin(["metro", "tram"]), 1, 2),
         ax=ax,
         zorder=4,
     )
     gpd_idfm.plot(
         color="white",
-        linewidth=np.where(gpd_idfm["mode"] == "metro", 2, 3),
+        linewidth=np.where(gpd_idfm["mode"].isin(["metro", "tram"]), 2, 3),
         ax=ax,
         zorder=3,
     )
@@ -58,7 +58,7 @@ def ajouter_stations_graphique(df_stations, ax):
         color="white",
         edgecolor="black",
         linewidth=0.5,
-        markersize=np.where(gpd_stations["mode"] == "metro", 5, 10),
+        markersize=np.where(gpd_stations["mode"].isin(["metro", "tram"]), 5, 10),
         ax=ax,
         zorder=5,
     )
@@ -79,7 +79,7 @@ def ajouter_pastilles_graphique(ax, gpd_terminus):
     gpd_terminus["x"] = centres.x.values + 1400 * (rangs - (tailles - 1) / 2)
     gpd_terminus["y"] = centres.y.values
     for ligne in gpd_terminus.itertuples():
-        forme = "round,pad=0.3" if ligne.mode == "rer" else "circle"
+        forme = "circle" if ligne.mode in ["metro", "tram"] else "round,pad=0.3"
         fond = {"boxstyle": forme, "facecolor": "#" + ligne.route_color}
         texte = {"color": "#" + ligne.route_text_color, "ha": "center", "va": "center"}
         ax.text(ligne.x, ligne.y, ligne.route_short_name, bbox=fond, zorder=6, **texte)
@@ -95,7 +95,9 @@ def generer_graphique_tranches(df_tranches):
         rot=0,
         ax=ax,
     )
-    ax.set_xlabel("Temps de trajet vers Châtelet ou La Défense (marche + métro/RER)")
+    ax.set_xlabel(
+        "Temps de trajet vers Châtelet ou La Défense (marche + transports ferrés)"
+    )
     ax.set_ylabel("Niveau de vie moyen (€ par an)")
     return ax
 
