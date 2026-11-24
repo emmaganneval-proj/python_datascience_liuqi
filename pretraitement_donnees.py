@@ -10,6 +10,24 @@ from shapely.geometry import LineString
 
 URL_ZIP_IDFM = "https://files.mobilitydatabase.org/tdg-80921/tdg-80921-202610140154/tdg-80921-202610140154.zip"
 URL_ZIP_FILOSOFI = "https://www.insee.fr/fr/statistiques/fichier/8735162/Filosofi2021_carreaux_200m_shp.zip"
+URL_MOBPRO = "https://www.insee.fr/fr/statistiques/fichier/9004795/RP2023_mobpro.parquet"
+
+NOMS_CSP = {
+    "1": "Agriculteurs",
+    "2": "Artisans, commerçants, chefs d'entreprise",
+    "3": "Cadres",
+    "4": "Professions intermédiaires",
+    "5": "Employés",
+    "6": "Ouvriers",
+}
+NOMS_MODES = {
+    "1": "Pas de transport",
+    "2": "Marche",
+    "3": "Vélo",
+    "4": "Deux-roues motorisé",
+    "5": "Voiture",
+    "6": "Transports en commun",
+}
 
 
 def telecharger_zip(url, nom_dossier):
@@ -27,6 +45,18 @@ def telecharger_zip(url, nom_dossier):
     os.remove("data/tmp.zip")
 
 
+def telecharger_fichier(url, nom_fichier):
+    """Télécharge un fichier dans le dossier /data"""
+    if os.path.exists(f"data/{nom_fichier}"):
+        return
+    os.makedirs("data", exist_ok=True)
+    with (
+        urllib.request.urlopen(url) as response,
+        open(f"data/{nom_fichier}", "wb") as fichier_sortie,
+    ):
+        fichier_sortie.write(response.read())
+
+
 def charger_filosofi(path):
     """Chargement des données de Filosofi"""
     liste_departements = ["75", "77", "78", "91", "92", "93", "94", "95"]
@@ -35,6 +65,16 @@ def charger_filosofi(path):
         df_filosofi["lcog_geo"].str[:2].isin(liste_departements)
     ]
     return df_filosofi
+
+
+def charger_mobpro(path):
+    """Chargement des trajets domicile-travail des actifs habitant en Île-de-France"""
+    df_mob = pd.read_parquet(
+        path,
+        columns=["COMMUNE", "ARM", "GS", "TRANS", "IPONDI"],
+        filters=[("REGION", "==", "11")],
+    )
+    return df_mob
 
 
 def charger_routes(path, modes=("metro", "rer", "transilien", "tram")):
@@ -155,6 +195,18 @@ def indicateurs_filosofi(df_filosofi):
     """Calcul de nouveaux indicateurs"""
     df_filosofi["nv"] = df_filosofi["ind_snv"] / df_filosofi["ind"]
     return df_filosofi
+
+
+def indicateurs_mobpro(df_mob):
+    """Calcul de nouveaux indicateurs"""
+    df_mob["CSP"] = df_mob["GS"].map(NOMS_CSP)
+    df_mob["mode"] = df_mob["TRANS"].map(NOMS_MODES)
+    df_mob["tc"] = df_mob["mode"] == "Transports en commun"
+    # Lieu de résidence : l'arrondissement à Paris, la commune ailleurs
+    df_mob["code_geo"] = np.where(
+        df_mob["COMMUNE"] == "75056", df_mob["ARM"], df_mob["COMMUNE"]
+    )
+    return df_mob
 
 
 def definir_quantiles(df_filosofi, indicateur, nb_quantiles):
