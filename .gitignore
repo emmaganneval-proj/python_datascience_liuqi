@@ -9,3 +9,6 @@ __pycache__/
 /data
 # Éditeur
 .vscode/
+
+# Figures générées par le rapport et main.py
+sorties/
