@@ -374,10 +374,15 @@ def charger_communes(path="data/communes.gpkg"):
     if os.path.exists(path):
         return gpd.read_file(path)
 
-    gpd_communes = gpd.read_file(URL_COMMUNES).rename(columns={"code": "code_commune"})
+    telecharger_fichier(URL_COMMUNES, "communes.geojson")
+    telecharger_fichier(URL_ARRONDISSEMENTS, "arrondissements.geojson")
+
+    gpd_communes = gpd.read_file("data/communes.geojson").rename(
+        columns={"code": "code_commune"}
+    )
     gpd_communes = gpd_communes[gpd_communes["code_commune"] != "75056"]
 
-    gpd_arr = gpd.read_file(URL_ARRONDISSEMENTS)
+    gpd_arr = gpd.read_file("data/arrondissements.geojson")
     gpd_arr["code_commune"] = gpd_arr["c_arinsee"].astype(int).astype(str)
     gpd_arr["nom"] = (
         gpd_arr["c_ar"]
