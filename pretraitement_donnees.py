@@ -1,4 +1,6 @@
 import gzip
+import http.client
+import io
 import os
 import urllib.request
 import zipfile
@@ -35,19 +37,22 @@ NOMS_MODES = {
 }
 
 
-def telecharger_zip(url, nom_dossier):
+def telecharger_zip(url, nom_dossier, nb_essais=5):
     """Télécharge un zip et le décompresse dans le dossier /data/{nom_dossier}"""
     if os.path.exists(f"data/{nom_dossier}"):
         return
     os.makedirs("data", exist_ok=True)
-    with (
-        urllib.request.urlopen(url) as response,
-        open("data/tmp.zip", "wb") as fichier_sortie,
-    ):
-        fichier_sortie.write(response.read())
-    with zipfile.ZipFile("data/tmp.zip") as zf:
-        zf.extractall(f"data/{nom_dossier}")
-    os.remove("data/tmp.zip")
+    for _ in range(nb_essais):
+        # Le serveur de l'Insee coupe parfois le transfert : on recommence
+        try:
+            with urllib.request.urlopen(url) as response:
+                contenu = response.read()
+            with zipfile.ZipFile(io.BytesIO(contenu)) as zf:
+                zf.extractall(f"data/{nom_dossier}")
+            return
+        except (http.client.IncompleteRead, zipfile.BadZipFile):
+            continue
+    raise OSError(f"Téléchargement incomplet de {url} après {nb_essais} essais")
 
 
 def telecharger_fichier(url, nom_fichier, nb_essais=5):
@@ -56,8 +61,11 @@ def telecharger_fichier(url, nom_fichier, nb_essais=5):
         return
     os.makedirs("data", exist_ok=True)
     for _ in range(nb_essais):
-        with urllib.request.urlopen(url) as response:
-            contenu = response.read()
+        try:
+            with urllib.request.urlopen(url) as response:
+                contenu = response.read()
+        except http.client.IncompleteRead:
+            continue
         # Le serveur de la Ville de Paris renvoie parfois le fichier compressé
         # sans le signaler : un contenu gzip commence toujours par 1f 8b
         if contenu.startswith(b"\x1f\x8b"):
