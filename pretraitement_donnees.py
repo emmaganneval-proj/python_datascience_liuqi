@@ -261,3 +261,29 @@ def construire_terminus(df_horaires, gpd_stations, df_routes):
         df_terminus, left_on="stop_id", right_on="parent_station"
     ).merge(df_routes, on="route_id")
     return gpd_terminus
+
+
+URL_COMMUNES = "https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions/ile-de-france/communes-ile-de-france.geojson"
+URL_ARRONDISSEMENTS = "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/arrondissements/exports/geojson"
+
+
+def charger_communes(path="data/communes.gpkg"):
+    "Contours des communes d'Île-de-France, avec Paris découpé en arrondissements"
+    if os.path.exists(path):
+        return gpd.read_file(path)
+
+    gpd_communes = gpd.read_file(URL_COMMUNES).rename(columns={"code": "code_commune"})
+    gpd_communes = gpd_communes[gpd_communes["code_commune"] != "75056"]
+
+    gpd_arr = gpd.read_file(URL_ARRONDISSEMENTS)
+    gpd_arr["code_commune"] = gpd_arr["c_arinsee"].astype(int).astype(str)
+    gpd_arr["nom"] = gpd_arr["c_ar"].astype(int).map(
+        lambda n: "Paris 1er" if n == 1 else f"Paris {n}e"
+    )
+
+    gpd_communes = pd.concat(
+        [gpd_communes, gpd_arr.to_crs(gpd_communes.crs)], ignore_index=True
+    )[["code_commune", "nom", "geometry"]].to_crs("EPSG:2154")
+    os.makedirs("data", exist_ok=True)
+    gpd_communes.to_file(path)
+    return gpd_communes

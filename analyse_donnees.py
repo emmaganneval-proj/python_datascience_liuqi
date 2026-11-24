@@ -2,6 +2,7 @@ import geopandas as gpd
 import networkx as nx
 import numpy as np
 import pandas as pd
+from shapely.geometry import Point
 
 
 def calculer_temps_trajet(graphe, destinations):
@@ -67,3 +68,98 @@ def calculer_nv_par_tranche_temps(gpd_carreaux, bornes):
         df_tranches["population"] / df_tranches["population"].sum()
     )
     return df_tranches
+
+
+def calculer_nv_par_station(gpd_carreaux):
+    "Niveau de vie moyen des habitants rattachés à chaque station"
+    df_nv = (
+        gpd_carreaux.dropna(subset=["stop_id"])
+        .groupby("stop_id")
+        .agg(population=("ind", "sum"), revenus=("ind_snv", "sum"))
+    )
+    # Moyenne pondérée par la population, et non moyenne des nv des carreaux
+    df_nv["nv"] = df_nv["revenus"] / df_nv["population"]
+    return df_nv
+
+
+def trace_ligne(gpd_idfm, ligne):
+    "Tracé le plus long de la ligne : il dessert toutes les stations (sauf branches)"
+    traces = gpd_idfm[gpd_idfm["route_short_name"] == ligne]
+    return traces.geometry.loc[traces.length.idxmax()]
+
+
+def positionner_stations_ligne(gpd_stations, df_stations, gpd_idfm, ligne):
+    "Position (en km depuis le terminus ouest ou nord) des stations, le long du tracé"
+    trace = trace_ligne(gpd_idfm, ligne)
+
+    ids_ligne = df_stations.loc[df_stations["route_short_name"] == ligne, "stop_id"]
+    gpd_ligne = gpd_stations[gpd_stations["stop_id"].isin(ids_ligne)].copy()
+    # Stations à plus de 300 m du tracé : sur une autre branche, on les écarte
+    gpd_ligne = gpd_ligne[gpd_ligne.distance(trace) < 300]
+
+    gpd_ligne["position_km"] = gpd_ligne.geometry.apply(trace.project) / 1000
+    gpd_ligne = gpd_ligne.sort_values("position_km")
+    # Lecture d'ouest en est (ou du nord au sud pour une ligne plutôt verticale) :
+    # on retourne l'axe si le tracé part dans l'autre sens
+    debut, fin = gpd_ligne.geometry.iloc[0], gpd_ligne.geometry.iloc[-1]
+    if abs(fin.x - debut.x) > abs(fin.y - debut.y):
+        a_retourner = debut.x > fin.x
+    else:
+        a_retourner = debut.y < fin.y
+    if a_retourner:
+        gpd_ligne["position_km"] = trace.length / 1000 - gpd_ligne["position_km"]
+        gpd_ligne = gpd_ligne.sort_values("position_km")
+    # Le premier terminus est à 0 km
+    gpd_ligne["position_km"] -= gpd_ligne["position_km"].min()
+    return gpd_ligne
+
+
+def ajouter_communes_stations(gpd_ligne, gpd_communes):
+    "Ajoute à chaque station le nom de sa commune (ou de son arrondissement à Paris)"
+    gpd_ligne = gpd.sjoin(
+        gpd_ligne, gpd_communes[["nom", "geometry"]], how="left", predicate="within"
+    ).drop(columns=["index_right"])
+    return gpd_ligne.rename(columns={"nom": "commune"})
+
+
+def calculer_nv_par_commune(gpd_centres, gpd_communes):
+    "Niveau de vie moyen de chaque commune (ou arrondissement), pondéré par la population"
+    gpd_centres = gpd.sjoin(
+        gpd_centres,
+        gpd_communes[["nom", "geometry"]].to_crs(gpd_centres.crs),
+        predicate="within",
+    )
+    sommes = gpd_centres.groupby("nom")[["ind_snv", "ind"]].sum()
+    return sommes["ind_snv"] / sommes["ind"]
+
+
+def calculer_carreaux_traverses(df_filosofi, gpd_ligne, gpd_idfm, ligne):
+    "Carreaux Filosofi traversés par le tracé, avec leur début et fin (en km) sur la ligne"
+    trace = trace_ligne(gpd_idfm, ligne)
+    # Même repère que les stations : on retrouve le sens et l'origine à partir d'elles
+    km_trace = gpd_ligne.geometry.apply(trace.project) / 1000
+    retourne = km_trace.iloc[0] > km_trace.iloc[-1]
+
+    def vers_km_ligne(km):
+        return km_trace.max() - km if retourne else km - km_trace.min()
+
+    # Carreaux qui touchent le tracé (index spatial : rapide), puis morceaux de tracé
+    proches = df_filosofi.iloc[df_filosofi.sindex.query(trace, predicate="intersects")]
+    morceaux = proches.geometry.intersection(trace).explode()
+    morceaux = morceaux[morceaux.length > 0]  # on ignore les carreaux juste effleurés
+
+    km_a = morceaux.apply(lambda m: trace.project(Point(m.coords[0])) / 1000)
+    km_b = morceaux.apply(lambda m: trace.project(Point(m.coords[-1])) / 1000)
+    df_carreaux = pd.DataFrame(
+        {
+            "debut": np.minimum(vers_km_ligne(km_a), vers_km_ligne(km_b)),
+            "fin": np.maximum(vers_km_ligne(km_a), vers_km_ligne(km_b)),
+            "nv": proches.loc[morceaux.index, "nv"],
+        }
+    )
+    # On garde la partie entre les deux terminus
+    km_max = gpd_ligne["position_km"].max()
+    df_carreaux = df_carreaux[(df_carreaux["fin"] > 0) & (df_carreaux["debut"] < km_max)]
+    df_carreaux["debut"] = df_carreaux["debut"].clip(lower=0)
+    df_carreaux["fin"] = df_carreaux["fin"].clip(upper=km_max)
+    return df_carreaux.sort_values("debut").reset_index(drop=True)
