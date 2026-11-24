@@ -10,6 +10,20 @@ Nous explorons deux axes :
 
 ## Exécution
 
-Sur Onyxia, le notebook s'exécute sans difficulté sur une session avec au moins 15Gio de mémoire. 
+Sur Onyxia, le notebook s'exécute sans difficulté sur une session avec au moins 15Gio de mémoire.
+
+Cloner le repo avec : 
+
+```
+git clone https://github.com/emmaganneval-proj/python_datascience_liuqi.git
+```
+
+Les données sont stockées dans mon bucket Onyxia personnel si elles ne se chargent pas depuis les URL. Pour les charger en cas de problème (uniquement depuis Onyxia) :
+
+```
+cd python_datascience_liuqi
+aws s3 sync s3://t[mon_nom_de_famille]/data/ ./data/
+```
+
 
 À noter que les données (plus de 3,5Go) ne sont téléchargées qu'une seule fois.
