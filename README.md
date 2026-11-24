@@ -10,8 +10,6 @@ Nous explorons deux axes :
 
 ## Exécution
 
-```
-pip install -r requirements.txt
-```
+Sur Onyxia, le notebook s'exécute sans difficulté sur une session avec au moins 15Gio de mémoire. 
 
 À noter que les données (plus de 3,5Go) ne sont téléchargées qu'une seule fois.
