@@ -6,6 +6,13 @@ Existe-t-il un lien entre les temps de trajet en transport en commun et le nivea
 
 ## Installation
 
-- Il faut utiliser une version de Python <= 3.12 (sinon incompatbilité avec pyproj)
-- Une fois uv installé, il faut synchroniser avec la commande uv sync ;
+- Il faut utiliser Python 3.12 (sinon incompatibilité avec pyproj) ;
+- Créer un environnement virtuel et installer les dépendances :
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
 - Décommenter les deux "telecharger_zip" pour télécharger les données (attention, les deux fichiers font 3,4 Go une fois décompressés).

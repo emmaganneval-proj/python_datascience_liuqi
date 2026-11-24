@@ -14,6 +14,8 @@ URL_ZIP_FILOSOFI = "https://www.insee.fr/fr/statistiques/fichier/8735162/Filosof
 
 def telecharger_zip(url, nom_dossier):
     """Télécharge un zip et le décompresse dans le dossier /data/{nom_dossier}"""
+    if os.path.exists(f"data/{nom_dossier}"):
+        return
     os.makedirs("data", exist_ok=True)
     with (
         urllib.request.urlopen(url) as response,
@@ -289,29 +291,3 @@ def construire_positions_stations(df_stations, gpd_traces):
     # Une station à plus de 600 m du tracé appartient à une autre branche
     gpd_positions = gpd_positions.loc[gpd_positions.distance(traces) < 600]
     return gpd_positions
-
-
-URL_COMMUNES = "https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions/ile-de-france/communes-ile-de-france.geojson"
-URL_ARRONDISSEMENTS = "https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/arrondissements/exports/geojson"
-
-
-def charger_communes(path="data/communes.gpkg"):
-    "Contours des communes d'Île-de-France, avec Paris découpé en arrondissements"
-    if os.path.exists(path):
-        return gpd.read_file(path)
-
-    gpd_communes = gpd.read_file(URL_COMMUNES).rename(columns={"code": "code_commune"})
-    gpd_communes = gpd_communes[gpd_communes["code_commune"] != "75056"]
-
-    gpd_arr = gpd.read_file(URL_ARRONDISSEMENTS)
-    gpd_arr["code_commune"] = gpd_arr["c_arinsee"].astype(int).astype(str)
-    gpd_arr["nom"] = gpd_arr["c_ar"].astype(int).map(
-        lambda n: "Paris 1er" if n == 1 else f"Paris {n}e"
-    )
-
-    gpd_communes = pd.concat(
-        [gpd_communes, gpd_arr.to_crs(gpd_communes.crs)], ignore_index=True
-    )[["code_commune", "nom", "geometry"]].to_crs("EPSG:2154")
-    os.makedirs("data", exist_ok=True)
-    gpd_communes.to_file(path)
-    return gpd_communes
