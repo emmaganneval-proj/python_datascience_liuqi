@@ -70,6 +70,76 @@ def calculer_nv_par_tranche_temps(gpd_carreaux, bornes):
     return df_tranches
 
 
+def calculer_distance_destinations(gpd_carreaux, gpd_stations, destinations):
+    "Distance à vol d'oiseau (en km) de chaque carreau à la destination la plus proche"
+    points = gpd_stations.loc[gpd_stations["stop_id"].isin(destinations)].union_all()
+    gpd_carreaux["distance_destination"] = gpd_carreaux.distance(points) / 1000
+    return gpd_carreaux
+
+
+def comparer_nv_a_distance_egale(gpd_carreaux, bornes):
+    "Niveau de vie des carreaux mieux ou moins bien connectés, par tranche de distance"
+    gpd_carreaux["tranche_distance"] = pd.cut(
+        gpd_carreaux["distance_destination"],
+        bins=bornes,
+        labels=[f"{bornes[i]}-{bornes[i + 1]} km" for i in range(len(bornes) - 1)],
+    )
+    # Un carreau est mieux connecté si son temps est sous la médiane, à distance égale
+    medianes = gpd_carreaux.groupby("tranche_distance", observed=True)[
+        "temps_total"
+    ].transform("median")
+    gpd_carreaux["connexion"] = np.where(
+        gpd_carreaux["temps_total"].isna(),
+        "non desservi",
+        np.where(
+            gpd_carreaux["temps_total"] <= medianes,
+            "mieux connecté",
+            "moins bien connecté",
+        ),
+    )
+    df_comparaison = gpd_carreaux.groupby(
+        ["tranche_distance", "connexion"], observed=True
+    ).agg(population=("ind", "sum"), revenus=("ind_snv", "sum"))
+    df_comparaison["nv"] = df_comparaison["revenus"] / df_comparaison["population"]
+    return df_comparaison["nv"].unstack()
+
+
+def calculer_profils_lignes(gpd_traces, gpd_centres, distance_max, longueur_troncon):
+    "Niveau de vie moyen par tronçon de chaque ligne, sur les carreaux proches du tracé"
+    liste_profils = []
+    for ligne in gpd_traces.itertuples():
+        gpd_proches = gpd_centres.loc[
+            gpd_centres.distance(ligne.geometry) < distance_max
+        ]
+        # Abscisse curviligne : distance le long du tracé jusqu'au projeté du carreau
+        abscisses = gpd_proches.geometry.apply(ligne.geometry.project)
+        df_profil = (
+            gpd_proches.assign(troncon=abscisses // longueur_troncon)
+            .groupby("troncon", as_index=False)
+            .agg(population=("ind", "sum"), revenus=("ind_snv", "sum"))
+        )
+        df_profil["route_short_name"] = ligne.route_short_name
+        df_profil["position_km"] = (
+            (df_profil["troncon"] + 0.5) * longueur_troncon / 1000
+        )
+        liste_profils.append(df_profil)
+
+    df_profils = pd.concat(liste_profils).sort_values(["route_short_name", "troncon"])
+    df_profils["nv"] = df_profils["revenus"] / df_profils["population"]
+    df_profils["ecart_nv"] = df_profils.groupby("route_short_name")["nv"].diff().abs()
+    return df_profils
+
+
+def comparer_heterogeneite_lignes(df_profils):
+    "Écart absolu moyen de niveau de vie entre stations successives, par ligne"
+    df_heterogeneite = (
+        df_profils.groupby("route_short_name")
+        .agg(ecart_moyen=("ecart_nv", "mean"), nv_moyen=("nv", "mean"))
+        .sort_values("ecart_moyen", ascending=False)
+    )
+    return df_heterogeneite
+
+
 def calculer_nv_par_station(gpd_carreaux):
     "Niveau de vie moyen des habitants rattachés à chaque station"
     df_nv = (

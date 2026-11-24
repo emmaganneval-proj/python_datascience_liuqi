@@ -5,6 +5,7 @@ import matplotlib.colors as mcolors
 import matplotlib.patheffects as effets
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import LinearSegmentedColormap
 import pandas as pd
 from matplotlib.legend_handler import HandlerTuple
 from matplotlib.patches import Patch
@@ -113,6 +114,66 @@ def generer_carte_temps(df_filosofi, gpd_carreaux):
         figsize=(10, 10),
     )
     ax.set_axis_off()
+    return ax
+
+
+def generer_nuage_distance_temps(gpd_carreaux):
+    "Temps de trajet selon la distance à vol d'oiseau, coloré par le niveau de vie"
+    ax = gpd_carreaux.drop(columns="geometry").plot.scatter(
+        x="distance_destination",
+        y="temps_total",
+        c="nv",
+        cmap="RdYlGn",
+        vmin=15_000,
+        vmax=50_000,
+        s=1,
+        figsize=(10, 6),
+    )
+    ax.set_xlabel("Distance à vol d'oiseau à Châtelet ou La Défense (km)")
+    ax.set_ylabel("Temps de trajet total (min)")
+    ax.figure.axes[-1].set_ylabel("Niveau de vie (€ par an)")
+    return ax
+
+
+def generer_graphique_connexion(df_comparaison):
+    "Niveau de vie selon la qualité de la connexion, à distance égale"
+    ax = df_comparaison.plot.bar(
+        color=["seagreen", "orange", "grey"], rot=0, figsize=(10, 5)
+    )
+    ax.set_xlabel("Distance à vol d'oiseau à Châtelet ou La Défense")
+    ax.set_ylabel("Niveau de vie moyen (€ par an)")
+    return ax
+
+
+def generer_profil_ligne(df_profils, gpd_positions, nom_ligne, nv_idf):
+    "Niveau de vie par tronçon le long de la ligne, avec le nom des stations"
+    df_ligne = df_profils.loc[df_profils["route_short_name"] == nom_ligne]
+    gpd_arrets = gpd_positions.loc[gpd_positions["route_short_name"] == nom_ligne]
+    couleur = "#" + gpd_arrets["route_color"].iloc[0]
+    ax = df_ligne.plot(
+        x="position_km",
+        y="nv",
+        color=couleur,
+        label="Le long du tracé",
+        figsize=(12, 5),
+    )
+    surface = ax.fill_between(df_ligne["position_km"], df_ligne["nv"], color="none")
+    degrade = ax.imshow(
+        np.linspace(1, 0, 100).reshape(-1, 1),
+        cmap=LinearSegmentedColormap.from_list("degrade", ["white", couleur]),
+        aspect="auto",
+        extent=(0, df_ligne["position_km"].max(), 0, df_ligne["nv"].max()),
+    )
+    degrade.set_clip_path(surface.get_paths()[0], transform=ax.transData)
+    ax.axhline(nv_idf, color="grey", linestyle="--", label="Moyenne Île-de-France")
+    ax.set_ylim(0, df_ligne["nv"].max() * 1.05)
+    ax.legend()
+    ax.set_xticks(gpd_arrets["position_km"], gpd_arrets["stop_name"], rotation=90)
+    ax.grid(axis="x", alpha=0.3)
+    ax.set_xlabel("")
+    ax.set_ylabel("Niveau de vie moyen le long du tracé (€ par an)")
+    ax.secondary_xaxis("top").set_xlabel("Distance le long du tracé (km)")
+    ax.set_title(f"Ligne {nom_ligne}")
     return ax
 
 
