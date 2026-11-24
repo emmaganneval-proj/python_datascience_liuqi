@@ -82,6 +82,7 @@ if __name__ == "__main__":
     ax = generer_carte_filosofi(df_filosofi, "nv")
     ax = ajouter_lignes_graphique(ax, gpd_idfm)
     ax = ajouter_stations_graphique(df_stations, ax)
+    gpd_terminus = gpd_terminus.loc[gpd_terminus["mode"] != "tram"]
     ax = ajouter_pastilles_graphique(
         ax, gpd_terminus.cx[XLIM[0] : XLIM[1], YLIM[0] : YLIM[1]]
     )
@@ -127,3 +128,4 @@ if __name__ == "__main__":
         ax = generer_profil_ligne(df_profils, gpd_positions, nom_ligne, nv_idf)
         enregistrer_graphique(ax, f"profil_ligne_{nom_ligne}")
     df_heterogeneite = comparer_heterogeneite_lignes(df_profils)
+    print(df_heterogeneite)

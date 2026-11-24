@@ -37,8 +37,8 @@ def charger_filosofi(path):
     return df_filosofi
 
 
-def charger_routes(path):
-    """Chargement des lignes IDFM (métro et RER)"""
+def charger_routes(path, modes=("metro", "rer", "transilien", "tram")):
+    """Chargement des lignes IDFM (métro, RER, Transilien et tram)"""
     df_routes = pd.read_csv(
         f"{path}/routes.txt",
         usecols=[
@@ -51,10 +51,20 @@ def charger_routes(path):
         ],
     )
 
-    filtre_metro = df_routes["route_type"] == 1
-    filtre_rer = (df_routes["route_type"] == 2) & (df_routes["agency_id"] == "IDFM:71")
-    df_routes = df_routes.loc[filtre_metro | filtre_rer]
-    df_routes["mode"] = np.where(df_routes["route_type"] == 1, "metro", "rer")
+    df_routes["mode"] = np.select(
+        [
+            df_routes["route_type"] == 1,
+            (df_routes["route_type"] == 2) & (df_routes["agency_id"] == "IDFM:71"),
+            (df_routes["route_type"] == 2) & (df_routes["agency_id"] == "IDFM:1046"),
+            df_routes["route_type"] == 0,
+        ],
+        ["metro", "rer", "transilien", "tram"],
+        default="autre",
+    )
+    # Le CDG VAL est une navette interne à l'aéroport de Roissy
+    df_routes = df_routes.loc[
+        df_routes["mode"].isin(modes) & (df_routes["route_short_name"] != "CDG VAL")
+    ]
     return df_routes
 
 
@@ -176,7 +186,7 @@ def definir_quantiles(df_filosofi, indicateur, nb_quantiles):
 
 
 def construire_lignes_idfm(df_parcours):
-    "Construit le tracé des lignes de métro / RER"
+    "Construit le tracé des lignes ferrées"
     df_shapes = df_parcours.groupby("shape_id").apply(
         lambda group: LineString(zip(group["shape_pt_lon"], group["shape_pt_lat"]))
     )
